@@ -1,0 +1,15 @@
+[package]
+name          = "alien-signals"
+version       = "0.1.0"
+edition       = "2024"
+authors       = ["kanarus <kanarus786@gmail.com>"]
+documentation = "https://docs.rs/alien-signals"
+homepage      = "https://crates.io/crates/alien-signals"
+repository    = "https://github.com/ohkami-rs/alien-signals"
+readme        = "README.md"
+license       = "MIT"
+description   = ""
+keywords      = []
+categories    = []
+
+[dependencies]
