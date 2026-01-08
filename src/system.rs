@@ -1,9 +1,9 @@
-use crate::primitive::{LinkVersion, Flags, Stack, Queue};
+use crate::primitive::{Version, Flags, Stack, Queue};
 use crate::node::{EffectContext, Link, LinkInit, Node};
 
 #[derive(Default)]
 struct System {
-    cycle: LinkVersion,
+    cycle: Version,
     batch_depth: usize,
     active_sub: Option<Node>,
     queued: Queue<Node<EffectContext>>,
@@ -42,7 +42,7 @@ pub fn end_batch() {
 pub(crate) fn increment_cycle() {
     SYSTEM.with_borrow_mut(|sys| sys.cycle.increment());
 }
-pub(crate) fn get_cycle() -> LinkVersion {
+pub(crate) fn get_cycle() -> Version {
     SYSTEM.with_borrow(|sys| sys.cycle)
 }
 
@@ -50,7 +50,7 @@ pub(crate) fn with_queued<T>(f: impl Fn(&mut Queue<Node<EffectContext>>) -> T) -
     SYSTEM.with_borrow_mut(|sys| f(&mut sys.queued))
 }
 
-pub(crate) fn link(dep: Node, sub: Node, version: LinkVersion) {
+pub(crate) fn link(dep: Node, sub: Node, version: Version) {
     let prev_dep = sub.deps_tail();
     if let Some(prev_dep) = prev_dep && prev_dep.dep() == dep {
         return;

@@ -1,4 +1,4 @@
-use crate::primitive::{Flags, LinkVersion, SmallAny};
+use crate::primitive::{Flags, Version, SmallAny};
 
 pub enum NodeContext {
     Signal(SignalContext),
@@ -37,7 +37,7 @@ pub struct EffectContext {
 /// SoA representation of a series of links
 #[derive(Default)]
 struct LinkArena {
-    version: Vec<LinkVersion>,
+    version: Vec<Version>,
     dep: Vec<Node>,
     sub: Vec<Node>,
     prev_sub: Vec<Option<Link>>,
@@ -91,7 +91,7 @@ impl<C> PartialEq for Node<C> {
 impl<C> Eq for Node<C> {}
 
 pub(crate) struct LinkInit {
-    pub(crate) version: LinkVersion,
+    pub(crate) version: Version,
     pub(crate) dep: Node,
     pub(crate) sub: Node,
     pub(crate) prev_sub: Option<Link>,
@@ -115,10 +115,10 @@ impl Link {
         })
     }
     
-    pub(crate) fn version(&self) -> LinkVersion {
+    pub(crate) fn version(&self) -> Version {
         ARENA.with_borrow(|arena| arena.link.version[self.0].clone())
     }
-    pub(crate) fn set_version(&self, version: LinkVersion) {
+    pub(crate) fn set_version(&self, version: Version) {
         ARENA.with_borrow_mut(|arena| arena.link.version[self.0] = version);
     }
     
