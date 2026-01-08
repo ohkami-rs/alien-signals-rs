@@ -142,3 +142,52 @@ impl SmallAny {
         }
     }
 }
+
+pub(crate) trait ThreadLocalUnsafeCellExt<T> {
+    fn with_borrow<R>(&'static self, f: impl FnOnce(&T) -> R) -> R;
+    fn with_borrow_mut<R>(&'static self, f: impl FnOnce(&mut T) -> R) -> R;
+}
+impl<T> ThreadLocalUnsafeCellExt<T> for std::thread::LocalKey<std::cell::UnsafeCell<T>> {
+    fn with_borrow<R>(&'static self, f: impl FnOnce(&T) -> R) -> R {
+        self.with(|uc| {
+            let borrow = unsafe { &*uc.get() };
+            f(borrow)
+        })
+    }
+    fn with_borrow_mut<R>(&'static self, f: impl FnOnce(&mut T) -> R) -> R {
+        self.with(|uc| {
+            let borrow_mut = unsafe { &mut *uc.get() };
+            f(borrow_mut)
+        })
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) struct NonMaxUsize(std::num::NonZeroUsize);
+impl NonMaxUsize {
+    pub(crate) const fn new(value: usize) -> Option<Self> {
+        match std::num::NonZeroUsize::new(value ^ std::usize::MAX) {
+            Some(nz) => Some(Self(nz)),
+            None => None,
+        }
+    }
+    
+    pub(crate) const fn get(&self) -> usize {
+        self.0.get() ^ std::usize::MAX
+    }
+}
+
+#[cfg(test)]
+#[test]
+fn test_nonmax_usize() {
+    assert_eq!(NonMaxUsize::new(0).unwrap().get(), 0);
+    for i in 1..=100 {
+        let nonmax = NonMaxUsize::new(i).unwrap();
+        assert_eq!(nonmax.get(), i);
+    }
+    for i in (std::usize::MAX - 100)..std::usize::MAX {
+        let nonmax = NonMaxUsize::new(i).unwrap();
+        assert_eq!(nonmax.get(), i);
+    }
+    assert!(NonMaxUsize::new(std::usize::MAX).is_none());
+}

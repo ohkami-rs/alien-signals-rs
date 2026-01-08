@@ -1,4 +1,4 @@
-use crate::primitive::{Flags, SmallAny, Version};
+use crate::primitive::{Flags, SmallAny, Version, NonMaxUsize, ThreadLocalUnsafeCellExt};
 
 pub enum NodeContext {
     Signal(SignalContext),
@@ -68,14 +68,16 @@ struct Arena {
 }
 
 thread_local! {
-    static ARENA: std::cell::RefCell<Arena> = std::cell::RefCell::new(Arena::default());
+    static ARENA: std::cell::UnsafeCell<Arena> = std::cell::UnsafeCell::new(Arena::default());
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub(crate) struct Link(usize);
+pub(crate) struct Link(NonMaxUsize);
+const _: () = assert!(std::mem::size_of::<Option<Link>>() == 8);
 
-pub struct Node<C = NodeContext>(usize, std::marker::PhantomData<C>);
-// not requiring `C: Clone`
+pub struct Node<C = NodeContext>(NonMaxUsize, std::marker::PhantomData<C>);
+const _: () = assert!(std::mem::size_of::<Node>() == 8);
+/// not requiring `C: Clone`
 impl<C> Clone for Node<C> {
     fn clone(&self) -> Self {
         Node(self.0, std::marker::PhantomData)
@@ -111,60 +113,60 @@ impl Link {
             arena.link.next_sub.push(init.next_sub);
             arena.link.prev_dep.push(init.prev_dep);
             arena.link.next_dep.push(init.next_dep);
-            Link(index)
+            Link(NonMaxUsize::new(index).expect("Link index overflow"))
         })
     }
 
     pub(crate) fn version(&self) -> Version {
-        ARENA.with_borrow(|arena| unsafe { *arena.link.version.get_unchecked(self.0) })
+        ARENA.with_borrow(|arena| unsafe { *arena.link.version.get_unchecked(self.0.get()) })
     }
     pub(crate) fn set_version(&self, version: Version) {
-        ARENA.with_borrow_mut(|arena| unsafe { *arena.link.version.get_unchecked_mut(self.0) = version });
+        ARENA.with_borrow_mut(|arena| unsafe { *arena.link.version.get_unchecked_mut(self.0.get()) = version });
     }
 
     pub(crate) fn dep(&self) -> Node {
-        ARENA.with_borrow(|arena| unsafe { *arena.link.dep.get_unchecked(self.0) })
+        ARENA.with_borrow(|arena| unsafe { *arena.link.dep.get_unchecked(self.0.get()) })
     }
 
     pub(crate) fn sub(&self) -> Node {
-        ARENA.with_borrow(|arena| unsafe { *arena.link.sub.get_unchecked(self.0) })
+        ARENA.with_borrow(|arena| unsafe { *arena.link.sub.get_unchecked(self.0.get()) })
     }
 
     pub(crate) fn prev_sub(&self) -> Option<Link> {
-        ARENA.with_borrow(|arena| unsafe { *arena.link.prev_sub.get_unchecked(self.0) })
+        ARENA.with_borrow(|arena| unsafe { *arena.link.prev_sub.get_unchecked(self.0.get()) })
     }
     pub(crate) fn set_prev_sub(&self, link: Option<Link>) {
-        ARENA.with_borrow_mut(|arena| unsafe { *arena.link.prev_sub.get_unchecked_mut(self.0) = link });
+        ARENA.with_borrow_mut(|arena| unsafe { *arena.link.prev_sub.get_unchecked_mut(self.0.get()) = link });
     }
 
     pub(crate) fn next_sub(&self) -> Option<Link> {
-        ARENA.with_borrow(|arena| unsafe { *arena.link.next_sub.get_unchecked(self.0) })
+        ARENA.with_borrow(|arena| unsafe { *arena.link.next_sub.get_unchecked(self.0.get()) })
     }
     pub(crate) fn set_next_sub(&self, link: Option<Link>) {
-        ARENA.with_borrow_mut(|arena| unsafe { *arena.link.next_sub.get_unchecked_mut(self.0) = link });
+        ARENA.with_borrow_mut(|arena| unsafe { *arena.link.next_sub.get_unchecked_mut(self.0.get()) = link });
     }
 
     pub(crate) fn prev_dep(&self) -> Option<Link> {
-        ARENA.with_borrow(|arena| unsafe { *arena.link.prev_dep.get_unchecked(self.0) })
+        ARENA.with_borrow(|arena| unsafe { *arena.link.prev_dep.get_unchecked(self.0.get()) })
     }
     pub(crate) fn set_prev_dep(&self, link: Option<Link>) {
-        ARENA.with_borrow_mut(|arena| unsafe { *arena.link.prev_dep.get_unchecked_mut(self.0) = link });
+        ARENA.with_borrow_mut(|arena| unsafe { *arena.link.prev_dep.get_unchecked_mut(self.0.get()) = link });
     }
 
     pub(crate) fn next_dep(&self) -> Option<Link> {
-        ARENA.with_borrow(|arena| unsafe { *arena.link.next_dep.get_unchecked(self.0) })
+        ARENA.with_borrow(|arena| unsafe { *arena.link.next_dep.get_unchecked(self.0.get()) })
     }
     pub(crate) fn set_next_dep(&self, link: Option<Link>) {
-        ARENA.with_borrow_mut(|arena| unsafe { *arena.link.next_dep.get_unchecked_mut(self.0) = link });
+        ARENA.with_borrow_mut(|arena| unsafe { *arena.link.next_dep.get_unchecked_mut(self.0.get()) = link });
     }
 }
 
 impl<C> Node<C> {
     pub fn flags(&self) -> Flags {
-        ARENA.with_borrow(|arena| unsafe { *arena.node.flags.get_unchecked(self.0) })
+        ARENA.with_borrow(|arena| unsafe { *arena.node.flags.get_unchecked(self.0.get()) })
     }
     pub fn set_flags(&self, flags: Flags) {
-        ARENA.with_borrow_mut(|arena| unsafe { *arena.node.flags.get_unchecked_mut(self.0) = flags });
+        ARENA.with_borrow_mut(|arena| unsafe { *arena.node.flags.get_unchecked_mut(self.0.get()) = flags });
     }
     /// ```rust
     /// alien_signals::get_active_sub().unwrap().update_flags(
@@ -172,35 +174,35 @@ impl<C> Node<C> {
     /// );
     /// ```
     pub fn update_flags(&self, f: impl FnOnce(&mut Flags)) {
-        ARENA.with_borrow_mut(|arena| f(unsafe { arena.node.flags.get_unchecked_mut(self.0) }));
+        ARENA.with_borrow_mut(|arena| f(unsafe { arena.node.flags.get_unchecked_mut(self.0.get()) }));
     }
 
     pub(crate) fn deps(&self) -> Option<Link> {
-        ARENA.with_borrow(|arena| unsafe { *arena.node.deps.get_unchecked(self.0) })
+        ARENA.with_borrow(|arena| unsafe { *arena.node.deps.get_unchecked(self.0.get()) })
     }
     pub(crate) fn set_deps(&self, link: Option<Link>) {
-        ARENA.with_borrow_mut(|arena| unsafe { *arena.node.deps.get_unchecked_mut(self.0) = link });
+        ARENA.with_borrow_mut(|arena| unsafe { *arena.node.deps.get_unchecked_mut(self.0.get()) = link });
     }
 
     pub(crate) fn deps_tail(&self) -> Option<Link> {
-        ARENA.with_borrow(|arena| unsafe { *arena.node.deps_tail.get_unchecked(self.0) })
+        ARENA.with_borrow(|arena| unsafe { *arena.node.deps_tail.get_unchecked(self.0.get()) })
     }
     pub(crate) fn set_deps_tail(&self, link: Option<Link>) {
-        ARENA.with_borrow_mut(|arena| unsafe { *arena.node.deps_tail.get_unchecked_mut(self.0) = link });
+        ARENA.with_borrow_mut(|arena| unsafe { *arena.node.deps_tail.get_unchecked_mut(self.0.get()) = link });
     }
 
     pub(crate) fn subs(&self) -> Option<Link> {
-        ARENA.with_borrow(|arena| unsafe { *arena.node.subs.get_unchecked(self.0) })
+        ARENA.with_borrow(|arena| unsafe { *arena.node.subs.get_unchecked(self.0.get()) })
     }
     pub(crate) fn set_subs(&self, link: Option<Link>) {
-        ARENA.with_borrow_mut(|arena| unsafe { *arena.node.subs.get_unchecked_mut(self.0) = link });
+        ARENA.with_borrow_mut(|arena| unsafe { *arena.node.subs.get_unchecked_mut(self.0.get()) = link });
     }
 
     pub(crate) fn subs_tail(&self) -> Option<Link> {
-        ARENA.with_borrow(|arena| unsafe { *arena.node.subs_tail.get_unchecked(self.0) })
+        ARENA.with_borrow(|arena| unsafe { *arena.node.subs_tail.get_unchecked(self.0.get()) })
     }
     pub(crate) fn set_subs_tail(&self, link: Option<Link>) {
-        ARENA.with_borrow_mut(|arena| unsafe { *arena.node.subs_tail.get_unchecked_mut(self.0) = link });
+        ARENA.with_borrow_mut(|arena| unsafe { *arena.node.subs_tail.get_unchecked_mut(self.0.get()) = link });
     }
 }
 
@@ -214,12 +216,15 @@ impl Node<NodeContext> {
             arena.node.subs.push(None);
             arena.node.subs_tail.push(None);
             arena.node.context_indices.push((NodeContextKind::None, 0));
-            Node(index, std::marker::PhantomData)
+            Node(
+                NonMaxUsize::new(index).expect("Node index overflow"),
+                std::marker::PhantomData
+            )
         })
     }
 
     pub(crate) fn kind(&self) -> NodeContextKind {
-        ARENA.with_borrow(|arena| arena.node.context_indices[self.0].0)
+        ARENA.with_borrow(|arena| arena.node.context_indices[self.0.get()].0)
     }
 }
 
@@ -257,13 +262,16 @@ impl Node<SignalContext> {
                     eq_fn(a, b)
                 }),
             });
-            Node(index, std::marker::PhantomData)
+            Node(
+                NonMaxUsize::new(index).expect("Node index overflow"),
+                std::marker::PhantomData
+            )
         })
     }
 
     pub(crate) fn context(&self) -> SignalContext {
         ARENA.with_borrow(|arena| {
-            let (kind, index) = arena.node.context_indices[self.0];
+            let (kind, index) = arena.node.context_indices[self.0.get()];
             match kind {
                 NodeContextKind::Signal => arena.node.signals[index].clone(),
                 _ => panic!("BUG: Node is not a Signal"),
@@ -272,7 +280,7 @@ impl Node<SignalContext> {
     }
     pub(crate) fn update_context(&self, f: impl FnOnce(&mut SignalContext)) {
         ARENA.with_borrow_mut(|arena| {
-            let (kind, index) = arena.node.context_indices[self.0];
+            let (kind, index) = arena.node.context_indices[self.0.get()];
             match kind {
                 NodeContextKind::Signal => f(&mut arena.node.signals[index]),
                 _ => panic!("BUG: Node is not a Signal"),
@@ -321,13 +329,16 @@ impl Node<ComputedContext> {
             arena.node.deps_tail.push(None);
             arena.node.subs.push(None);
             arena.node.subs_tail.push(None);
-            Node(index, std::marker::PhantomData)
+            Node(
+                NonMaxUsize::new(index).expect("Node index overflow"),
+                std::marker::PhantomData
+            )
         })
     }
 
     pub(crate) fn context(&self) -> ComputedContext {
         ARENA.with_borrow(|arena| {
-            let (kind, index) = arena.node.context_indices[self.0];
+            let (kind, index) = arena.node.context_indices[self.0.get()];
             match kind {
                 NodeContextKind::Computed => arena.node.computeds[index].clone(),
                 _ => panic!("BUG: Node is not a Computed"),
@@ -336,7 +347,7 @@ impl Node<ComputedContext> {
     }
     pub(crate) fn update_context(&self, f: impl FnOnce(&mut ComputedContext)) {
         ARENA.with_borrow_mut(|arena| {
-            let (kind, index) = arena.node.context_indices[self.0];
+            let (kind, index) = arena.node.context_indices[self.0.get()];
             match kind {
                 NodeContextKind::Computed => f(&mut arena.node.computeds[index]),
                 _ => panic!("BUG: Node is not a Computed"),
@@ -365,13 +376,16 @@ impl Node<EffectContext> {
             arena.node.deps_tail.push(None);
             arena.node.subs.push(None);
             arena.node.subs_tail.push(None);
-            Node(index, std::marker::PhantomData)
+            Node(
+                NonMaxUsize::new(index).expect("Node index overflow"),
+                std::marker::PhantomData
+            )
         })
     }
 
     pub(crate) fn context(&self) -> EffectContext {
         ARENA.with_borrow(|arena| {
-            let (kind, index) = arena.node.context_indices[self.0];
+            let (kind, index) = arena.node.context_indices[self.0.get()];
             match kind {
                 NodeContextKind::Effect => arena.node.effects[index].clone(),
                 _ => panic!("BUG: Node is not an Effect"),
@@ -399,7 +413,7 @@ impl From<Node<EffectContext>> for Node<NodeContext> {
 impl TryFrom<Node<NodeContext>> for Node<SignalContext> {
     type Error = ();
     fn try_from(node: Node<NodeContext>) -> Result<Self, Self::Error> {
-        match ARENA.with_borrow(|arena| arena.node.context_indices[node.0].0) {
+        match ARENA.with_borrow(|arena| arena.node.context_indices[node.0.get()].0) {
             NodeContextKind::Signal => Ok(Node(node.0, std::marker::PhantomData)),
             _ => Err(()),
         }
@@ -408,7 +422,7 @@ impl TryFrom<Node<NodeContext>> for Node<SignalContext> {
 impl TryFrom<Node<NodeContext>> for Node<ComputedContext> {
     type Error = ();
     fn try_from(node: Node<NodeContext>) -> Result<Self, Self::Error> {
-        match ARENA.with_borrow(|arena| arena.node.context_indices[node.0].0) {
+        match ARENA.with_borrow(|arena| arena.node.context_indices[node.0.get()].0) {
             NodeContextKind::Computed => Ok(Node(node.0, std::marker::PhantomData)),
             _ => Err(()),
         }
@@ -417,7 +431,7 @@ impl TryFrom<Node<NodeContext>> for Node<ComputedContext> {
 impl TryFrom<Node<NodeContext>> for Node<EffectContext> {
     type Error = ();
     fn try_from(node: Node<NodeContext>) -> Result<Self, Self::Error> {
-        match ARENA.with_borrow(|arena| arena.node.context_indices[node.0].0) {
+        match ARENA.with_borrow(|arena| arena.node.context_indices[node.0.get()].0) {
             NodeContextKind::Effect => Ok(Node(node.0, std::marker::PhantomData)),
             _ => Err(()),
         }
