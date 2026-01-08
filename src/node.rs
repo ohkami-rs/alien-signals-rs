@@ -1,4 +1,4 @@
-use crate::primitive::{Flags, Version, SmallAny};
+use crate::primitive::{Flags, SmallAny, Version};
 
 pub enum NodeContext {
     Signal(SignalContext),
@@ -114,43 +114,43 @@ impl Link {
             Link(index)
         })
     }
-    
+
     pub(crate) fn version(&self) -> Version {
         ARENA.with_borrow(|arena| arena.link.version[self.0].clone())
     }
     pub(crate) fn set_version(&self, version: Version) {
         ARENA.with_borrow_mut(|arena| arena.link.version[self.0] = version);
     }
-    
+
     pub(crate) fn dep(&self) -> Node {
-        ARENA.with_borrow(|arena| Node(arena.link.dep[self.0].0, std::marker::PhantomData))
+        ARENA.with_borrow(|arena| arena.link.dep[self.0])
     }
-    
+
     pub(crate) fn sub(&self) -> Node {
-        ARENA.with_borrow(|arena| Node(arena.link.sub[self.0].0, std::marker::PhantomData))
+        ARENA.with_borrow(|arena| arena.link.sub[self.0])
     }
-    
+
     pub(crate) fn prev_sub(&self) -> Option<Link> {
         ARENA.with_borrow(|arena| arena.link.prev_sub[self.0])
     }
     pub(crate) fn set_prev_sub(&self, link: Option<Link>) {
         ARENA.with_borrow_mut(|arena| arena.link.prev_sub[self.0] = link);
     }
-    
+
     pub(crate) fn next_sub(&self) -> Option<Link> {
         ARENA.with_borrow(|arena| arena.link.next_sub[self.0])
     }
     pub(crate) fn set_next_sub(&self, link: Option<Link>) {
         ARENA.with_borrow_mut(|arena| arena.link.next_sub[self.0] = link);
     }
-    
+
     pub(crate) fn prev_dep(&self) -> Option<Link> {
         ARENA.with_borrow(|arena| arena.link.prev_dep[self.0])
     }
     pub(crate) fn set_prev_dep(&self, link: Option<Link>) {
         ARENA.with_borrow_mut(|arena| arena.link.prev_dep[self.0] = link);
     }
-    
+
     pub(crate) fn next_dep(&self) -> Option<Link> {
         ARENA.with_borrow(|arena| arena.link.next_dep[self.0])
     }
@@ -174,28 +174,28 @@ impl<C> Node<C> {
     pub fn update_flags(&self, f: impl FnOnce(&mut Flags)) {
         ARENA.with_borrow_mut(|arena| f(&mut arena.node.flags[self.0]));
     }
-    
+
     pub(crate) fn deps(&self) -> Option<Link> {
         ARENA.with_borrow(|arena| arena.node.deps[self.0])
     }
     pub(crate) fn set_deps(&self, link: Option<Link>) {
         ARENA.with_borrow_mut(|arena| arena.node.deps[self.0] = link);
     }
-    
+
     pub(crate) fn deps_tail(&self) -> Option<Link> {
         ARENA.with_borrow(|arena| arena.node.deps_tail[self.0])
     }
     pub(crate) fn set_deps_tail(&self, link: Option<Link>) {
         ARENA.with_borrow_mut(|arena| arena.node.deps_tail[self.0] = link);
     }
-    
+
     pub(crate) fn subs(&self) -> Option<Link> {
         ARENA.with_borrow(|arena| arena.node.subs[self.0])
     }
     pub(crate) fn set_subs(&self, link: Option<Link>) {
         ARENA.with_borrow_mut(|arena| arena.node.subs[self.0] = link);
     }
-    
+
     pub(crate) fn subs_tail(&self) -> Option<Link> {
         ARENA.with_borrow(|arena| arena.node.subs_tail[self.0])
     }
@@ -217,7 +217,7 @@ impl Node<NodeContext> {
             Node(index, std::marker::PhantomData)
         })
     }
-    
+
     pub(crate) fn kind(&self) -> NodeContextKind {
         ARENA.with_borrow(|arena| arena.node.context_indices[self.0].0)
     }
@@ -240,20 +240,27 @@ impl Node<SignalContext> {
             arena.node.deps_tail.push(None);
             arena.node.subs.push(None);
             arena.node.subs_tail.push(None);
-            arena.node.context_indices.push((NodeContextKind::Signal, context_index));
+            arena
+                .node
+                .context_indices
+                .push((NodeContextKind::Signal, context_index));
             arena.node.signals.push(SignalContext {
                 current_value: init.clone(),
                 pending_value: init,
                 eq: std::rc::Rc::new(move |a, b| {
-                    let a = a.downcast_ref::<T>().unwrap_or_else(|| panic!("BUG: signal type is not {}", std::any::type_name::<T>()));
-                    let b = b.downcast_ref::<T>().unwrap_or_else(|| panic!("BUG: signal type is not {}", std::any::type_name::<T>()));
+                    let a = a.downcast_ref::<T>().unwrap_or_else(|| {
+                        panic!("BUG: signal type is not {}", std::any::type_name::<T>())
+                    });
+                    let b = b.downcast_ref::<T>().unwrap_or_else(|| {
+                        panic!("BUG: signal type is not {}", std::any::type_name::<T>())
+                    });
                     eq_fn(a, b)
                 }),
             });
             Node(index, std::marker::PhantomData)
         })
     }
-    
+
     pub(crate) fn context(&self) -> SignalContext {
         ARENA.with_borrow(|arena| {
             let (kind, index) = arena.node.context_indices[self.0];
@@ -274,9 +281,7 @@ impl Node<SignalContext> {
     }
 }
 impl Node<ComputedContext> {
-    pub(crate) fn new<T: PartialEq + 'static>(
-        getter: impl Fn(Option<&T>) -> T + 'static,
-    ) -> Self {
+    pub(crate) fn new<T: PartialEq + 'static>(getter: impl Fn(Option<&T>) -> T + 'static) -> Self {
         Self::new_with_eq_fn(getter, T::eq)
     }
     pub(crate) fn new_with_eq_fn<T: 'static>(
@@ -289,20 +294,28 @@ impl Node<ComputedContext> {
             arena.node.computeds.push(ComputedContext {
                 value: None,
                 get: std::rc::Rc::new(move |prev_any| {
-                    let prev_t = prev_any.map(|any| any
-                        .downcast_ref::<T>()
-                        .unwrap_or_else(|| panic!("BUG: computed type is not {}", std::any::type_name::<T>()))
-                    );
+                    let prev_t = prev_any.map(|any| {
+                        any.downcast_ref::<T>().unwrap_or_else(|| {
+                            panic!("BUG: computed type is not {}", std::any::type_name::<T>())
+                        })
+                    });
                     let new_t = getter(prev_t);
                     SmallAny::new(new_t)
                 }),
                 eq: std::rc::Rc::new(move |a, b| {
-                    let a = a.downcast_ref::<T>().unwrap_or_else(|| panic!("BUG: computed type is not {}", std::any::type_name::<T>()));
-                    let b = b.downcast_ref::<T>().unwrap_or_else(|| panic!("BUG: computed type is not {}", std::any::type_name::<T>()));
+                    let a = a.downcast_ref::<T>().unwrap_or_else(|| {
+                        panic!("BUG: computed type is not {}", std::any::type_name::<T>())
+                    });
+                    let b = b.downcast_ref::<T>().unwrap_or_else(|| {
+                        panic!("BUG: computed type is not {}", std::any::type_name::<T>())
+                    });
                     eq_fn(a, b)
                 }),
             });
-            arena.node.context_indices.push((NodeContextKind::Computed, context_index));
+            arena
+                .node
+                .context_indices
+                .push((NodeContextKind::Computed, context_index));
             arena.node.flags.push(Flags::NONE);
             arena.node.deps.push(None);
             arena.node.deps_tail.push(None);
@@ -311,7 +324,7 @@ impl Node<ComputedContext> {
             Node(index, std::marker::PhantomData)
         })
     }
-    
+
     pub(crate) fn context(&self) -> ComputedContext {
         ARENA.with_borrow(|arena| {
             let (kind, index) = arena.node.context_indices[self.0];
@@ -334,14 +347,20 @@ impl Node<ComputedContext> {
 
 impl Node<EffectContext> {
     pub(crate) fn new(f: impl Fn() + 'static) -> Self {
-        ARENA.with_borrow_mut(|arena| {            
+        ARENA.with_borrow_mut(|arena| {
             let index = arena.node.flags.len();
             let context_index = arena.node.effects.len();
             arena.node.effects.push(EffectContext {
                 run: std::rc::Rc::new(f),
             });
-            arena.node.context_indices.push((NodeContextKind::Effect, context_index));
-            arena.node.flags.push(Flags::WATCHING | Flags::RECURSED_CHECK);
+            arena
+                .node
+                .context_indices
+                .push((NodeContextKind::Effect, context_index));
+            arena
+                .node
+                .flags
+                .push(Flags::WATCHING | Flags::RECURSED_CHECK);
             arena.node.deps.push(None);
             arena.node.deps_tail.push(None);
             arena.node.subs.push(None);
@@ -349,7 +368,7 @@ impl Node<EffectContext> {
             Node(index, std::marker::PhantomData)
         })
     }
-    
+
     pub(crate) fn context(&self) -> EffectContext {
         ARENA.with_borrow(|arena| {
             let (kind, index) = arena.node.context_indices[self.0];

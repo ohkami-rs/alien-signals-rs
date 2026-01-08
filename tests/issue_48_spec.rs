@@ -1,30 +1,30 @@
-use alien_signals::{Computed, Effect, set_active_sub, Signal};
+use alien_signals::{Computed, Effect, Signal, set_active_sub};
 
 #[test]
 fn issue48() {
     let source = Signal::new(0);
-    let dispose_inner: std::rc::Rc<std::sync::Mutex<Option<Box<dyn FnOnce()>>>>
-        = std::rc::Rc::new(std::sync::Mutex::new(None));
-    
+    let dispose_inner: std::rc::Rc<std::sync::Mutex<Option<Box<dyn FnOnce()>>>> =
+        std::rc::Rc::new(std::sync::Mutex::new(None));
+
     let _ = reaction(
         move || source.get(),
         move |val, _| {
             if *val == 1 {
-                let dispose_reaction = reaction(
-                    move || source.get(),
-                    |_, _| {},
-                    Default::default(),
-                );
-                dispose_inner.lock().unwrap().replace(Box::new(dispose_reaction));
+                let dispose_reaction =
+                    reaction(move || source.get(), |_, _| {}, Default::default());
+                dispose_inner
+                    .lock()
+                    .unwrap()
+                    .replace(Box::new(dispose_reaction));
             } else if *val == 2 {
                 if let Some(dispose_inner) = dispose_inner.lock().unwrap().take() {
                     dispose_inner();
                 }
             }
         },
-        Default::default()
+        Default::default(),
     );
-    
+
     source.set(1);
     source.set(2);
     source.set(3);
@@ -58,16 +58,14 @@ fn reaction<T: PartialEq + Clone + 'static>(
     }: ReactionOptions<T>,
 ) -> impl FnOnce() {
     let effect_fn = std::rc::Rc::new(effect_fn);
-    
+
     let prev_value = std::rc::Rc::new(std::sync::Mutex::new(None));
     let version = std::rc::Rc::new(std::sync::Mutex::new(0));
-    
-    let tracked = Computed::new(move |_| {
-        data_fn()
-    });
-    
-    let mut dispose: std::rc::Rc<std::sync::Mutex<Option<Box<dyn FnOnce()>>>>
-        = std::rc::Rc::new(std::sync::Mutex::new(None));
+
+    let tracked = Computed::new(move |_| data_fn());
+
+    let mut dispose: std::rc::Rc<std::sync::Mutex<Option<Box<dyn FnOnce()>>>> =
+        std::rc::Rc::new(std::sync::Mutex::new(None));
     let effect = Effect::new(move || {
         let current = tracked.get();
         if !fire_immediately && *version.lock().unwrap() == 0 {
@@ -88,7 +86,8 @@ fn reaction<T: PartialEq + Clone + 'static>(
                     effect_fn(&current, old_value.as_ref());
                     if once {
                         if (fire_immediately && *version.lock().unwrap() > 1)
-                        || (!fire_immediately && *version.lock().unwrap() > 0) {
+                            || (!fire_immediately && *version.lock().unwrap() > 0)
+                        {
                             if let Some(dispose) = dispose.lock().unwrap().take() {
                                 dispose();
                             }
@@ -101,7 +100,7 @@ fn reaction<T: PartialEq + Clone + 'static>(
     dispose = std::rc::Rc::new(std::sync::Mutex::new(Some(Box::new(move || {
         effect.dispose();
     }))));
-    
+
     move || {
         if let Some(dispose) = dispose.lock().unwrap().take() {
             dispose();

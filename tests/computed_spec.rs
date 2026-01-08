@@ -1,4 +1,4 @@
-use alien_signals::{Signal, Computed};
+use alien_signals::{Computed, Signal};
 
 #[test]
 fn should_correctly_propagate_changes_through_computed_signals() {
@@ -21,12 +21,12 @@ fn should_correctly_propagate_changes_through_computed_signals() {
         println!("after c2.get()");
         c2
     });
-    
+
     let _ = c3.get();
     src.set(1);
     let _ = c2.get();
     src.set(3);
-    
+
     assert_eq!(c3.get(), 1);
 }
 
@@ -37,7 +37,7 @@ fn should_propagate_updated_source_value_through_chained_computation() {
     let b = Computed::new(move |_| a.get() % 2);
     let c = Computed::new(move |_| src.get());
     let d = Computed::new(move |_| b.get() + c.get());
-    
+
     assert_eq!(d.get(), 0);
     src.set(2);
     assert_eq!(d.get(), 2);
@@ -46,7 +46,7 @@ fn should_propagate_updated_source_value_through_chained_computation() {
 #[test]
 fn should_not_update_if_the_signal_value_is_reverted() {
     let times = std::rc::Rc::new(std::sync::Mutex::new(0));
-    
+
     let src = Signal::new(0);
     let c1 = Computed::new({
         let times = times.clone();
@@ -55,7 +55,7 @@ fn should_not_update_if_the_signal_value_is_reverted() {
             src.get()
         }
     });
-    
+
     let _ = c1.get();
     assert_eq!(*times.lock().unwrap(), 1);
     src.set(1);

@@ -28,12 +28,14 @@ macro_rules! propagate_w_h {
                     let prev = last;
                     last = SignalOrComputed::Computed(Computed::new(move |_| prev.get() + 1));
                 }
-                Effect::new(move || {let _ = last.get();});
+                Effect::new(move || {
+                    let _ = last.get();
+                });
             }
             b.iter(|| {
                 src.set(src.get() + 1);
             });
-        }        
+        }
     };
 }
 propagate_w_h! {propagate_1x1: 1 x 1}

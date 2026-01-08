@@ -1,9 +1,9 @@
-use alien_signals::{Signal, Computed, Effect, EffectScope};
+use alien_signals::{Computed, Effect, EffectScope, Signal};
 
 #[test]
 fn should_clear_subscription_when_untracked_by_all_subscribers() {
     let b_run_times = std::rc::Rc::new(std::sync::Mutex::new(0));
-    
+
     let a = Signal::new(0);
     let b = Computed::new({
         let b_run_times = b_run_times.clone();
@@ -15,7 +15,7 @@ fn should_clear_subscription_when_untracked_by_all_subscribers() {
     let effect = Effect::new(move || {
         println!("[effect] b: {}", b.get());
     });
-    
+
     assert_eq!(*b_run_times.lock().unwrap(), 1);
     a.set(2);
     assert_eq!(*b_run_times.lock().unwrap(), 2);
@@ -37,7 +37,7 @@ fn should_not_run_untracked_inner_effect() {
             });
         }
     });
-    
+
     a.set(2);
     a.set(1);
     a.set(0);
@@ -47,7 +47,7 @@ fn should_not_run_untracked_inner_effect() {
 fn should_run_outer_effect_first() {
     let a = Signal::new(1);
     let b = Signal::new(1);
-    
+
     Effect::new(move || {
         if a.get() > 0 {
             Effect::new(move || {
@@ -58,7 +58,7 @@ fn should_run_outer_effect_first() {
             });
         }
     });
-    
+
     alien_signals::start_batch();
     b.set(0);
     a.set(0);
@@ -69,9 +69,9 @@ fn should_run_outer_effect_first() {
 fn should_not_trigger_inner_effect_when_resolve_maybe_dirty() {
     let a = Signal::new(0);
     let b = Computed::new(move |_| a.get() % 2);
-    
+
     let inner_trigger_times = std::rc::Rc::new(std::sync::Mutex::new(0));
-    
+
     Effect::new(move || {
         let inner_trigger_times = inner_trigger_times.clone();
         Effect::new(move || {
@@ -82,7 +82,7 @@ fn should_not_trigger_inner_effect_when_resolve_maybe_dirty() {
             }
         });
     });
-    
+
     a.set(2);
 }
 
@@ -94,7 +94,7 @@ fn should_notify_inner_effects_in_the_same_order_as_non_inner_effects() {
     let order1 = std::rc::Rc::new(std::sync::Mutex::new(vec![]));
     let order2 = std::rc::Rc::new(std::sync::Mutex::new(vec![]));
     let order3 = std::rc::Rc::new(std::sync::Mutex::new(vec![]));
-    
+
     Effect::new({
         let order1 = order1.clone();
         move || {
@@ -110,7 +110,7 @@ fn should_notify_inner_effects_in_the_same_order_as_non_inner_effects() {
             let _ = b.get();
         }
     });
-    
+
     Effect::new({
         let _ = c.get();
         let order2 = order2.clone();
@@ -132,7 +132,7 @@ fn should_notify_inner_effects_in_the_same_order_as_non_inner_effects() {
             });
         }
     });
-    
+
     EffectScope::new({
         let order3 = order3.clone();
         move || {
@@ -153,19 +153,25 @@ fn should_notify_inner_effects_in_the_same_order_as_non_inner_effects() {
             });
         }
     });
-    
+
     order1.lock().unwrap().clear();
     order2.lock().unwrap().clear();
     order3.lock().unwrap().clear();
-    
+
     alien_signals::start_batch();
     b.set(1);
     a.set(1);
     alien_signals::end_batch();
-    
+
     assert_eq!(order1.lock().unwrap().as_slice(), ["effect2", "effect1"]);
-    assert_eq!(order2.lock().unwrap().as_slice(), order1.lock().unwrap().as_slice());
-    assert_eq!(order3.lock().unwrap().as_slice(), order1.lock().unwrap().as_slice());
+    assert_eq!(
+        order2.lock().unwrap().as_slice(),
+        order1.lock().unwrap().as_slice()
+    );
+    assert_eq!(
+        order3.lock().unwrap().as_slice(),
+        order1.lock().unwrap().as_slice()
+    );
 }
 
 #[test]
@@ -177,11 +183,11 @@ fn should_custom_effect_support_batch() {
             alien_signals::end_batch();
         })
     }
-    
+
     let logs = std::rc::Rc::new(std::sync::Mutex::new(vec![]));
     let a = Signal::new(0);
     let b = Signal::new(0);
-    
+
     let aa = Computed::new({
         let logs = logs.clone();
         move |_| {
@@ -199,15 +205,18 @@ fn should_custom_effect_support_batch() {
             b.get()
         }
     });
-    
+
     batch_effect(move || {
         let _ = bb.get();
     });
     batch_effect(move || {
         let _ = aa.get();
     });
-    
-    assert_eq!(logs.lock().unwrap().as_slice(), ["bb", "aa-0", "aa-1", "bb"]);
+
+    assert_eq!(
+        logs.lock().unwrap().as_slice(),
+        ["bb", "aa-0", "aa-1", "bb"]
+    );
 }
 
 #[test]
@@ -215,7 +224,7 @@ fn should_duplicate_subscribers_do_not_affect_the_notify_order() {
     let src1 = Signal::new(0);
     let src2 = Signal::new(0);
     let order = std::rc::Rc::new(std::sync::Mutex::new(vec![]));
-    
+
     Effect::new({
         let order = order.clone();
         move || {
@@ -238,10 +247,10 @@ fn should_duplicate_subscribers_do_not_affect_the_notify_order() {
         }
     });
     src2.set(1);
-    
+
     order.lock().unwrap().clear();
     src1.set(src1.get() + 1);
-    
+
     assert_eq!(order.lock().unwrap().as_slice(), ["a", "b"]);
 }
 
@@ -250,7 +259,7 @@ fn should_handle_side_effect_with_inner_effects() {
     let a = Signal::new(0);
     let b = Signal::new(0);
     let order = std::rc::Rc::new(std::sync::Mutex::new(vec![]));
-    
+
     Effect::new({
         let order = order.clone();
         move || {
@@ -269,7 +278,7 @@ fn should_handle_side_effect_with_inner_effects() {
                 }
             });
             assert_eq!(order.lock().unwrap().as_slice(), ["a", "b"]);
-            
+
             order.lock().unwrap().clear();
             b.set(1);
             a.set(1);
@@ -290,9 +299,9 @@ fn should_handle_flags_are_indirectly_updated_dyring_check_dirty() {
         let _ = c.get();
         b.get()
     });
-    
+
     let triggers = std::rc::Rc::new(std::sync::Mutex::new(0));
-    
+
     Effect::new({
         let triggers = triggers.clone();
         move || {
@@ -309,10 +318,10 @@ fn should_handle_flags_are_indirectly_updated_dyring_check_dirty() {
 fn should_handle_effect_recursion_for_the_first_execution() {
     let src1 = Signal::new(0);
     let src2 = Signal::new(0);
-    
+
     let triggers1 = std::rc::Rc::new(std::sync::Mutex::new(0));
     let triggers2 = std::rc::Rc::new(std::sync::Mutex::new(0));
-    
+
     Effect::new({
         let triggers1 = triggers1.clone();
         move || {
@@ -328,7 +337,7 @@ fn should_handle_effect_recursion_for_the_first_execution() {
             let _ = src2.get();
         }
     });
-    
+
     assert_eq!(*triggers1.lock().unwrap(), 1);
     assert_eq!(*triggers2.lock().unwrap(), 1);
 }
@@ -336,19 +345,19 @@ fn should_handle_effect_recursion_for_the_first_execution() {
 #[test]
 fn should_support_custom_recurse_effect() {
     let src = Signal::new(0);
-    
+
     let triggers = std::rc::Rc::new(std::sync::Mutex::new(0));
-    
+
     Effect::new({
         let triggers = triggers.clone();
         move || {
-            alien_signals::get_active_sub().unwrap().update_flags(
-                |f| *f &= !alien_signals::Flags::RECURSED_CHECK
-            );
+            alien_signals::get_active_sub()
+                .unwrap()
+                .update_flags(|f| *f &= !alien_signals::Flags::RECURSED_CHECK);
             *triggers.lock().unwrap() += 1;
             src.set(i32::min(src.get() + 1, 5));
         }
     });
-    
+
     assert_eq!(*triggers.lock().unwrap(), 6);
 }

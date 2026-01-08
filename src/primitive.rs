@@ -48,7 +48,7 @@ impl std::ops::BitOrAssign for Flags {
 
 pub(crate) struct Stack<T>(Vec<T>);
 // not requiring `T: Clone`
-impl <T> Default for Stack<T> {
+impl<T> Default for Stack<T> {
     fn default() -> Self {
         Self::new()
     }
@@ -57,11 +57,11 @@ impl<T> Stack<T> {
     pub(crate) const fn new() -> Self {
         Self(Vec::new())
     }
-    
+
     pub(crate) fn pop(&mut self) -> Option<T> {
         self.0.pop()
     }
-    
+
     pub(crate) fn push(&mut self, item: T) {
         self.0.push(item);
     }
@@ -78,19 +78,19 @@ impl<T> Queue<T> {
     pub(crate) const fn new() -> Self {
         Self(std::collections::VecDeque::new())
     }
-    
+
     pub(crate) fn pop(&mut self) -> Option<T> {
         self.0.pop_front()
     }
-    
+
     pub(crate) fn push(&mut self, item: T) {
         self.0.push_back(item);
     }
-    
+
     pub(crate) fn length(&self) -> usize {
         self.0.len()
     }
-    
+
     pub(crate) fn as_slice_mut(&mut self) -> &mut [T] {
         self.0.make_contiguous()
     }
@@ -102,7 +102,7 @@ impl Version {
     pub(crate) const fn new() -> Self {
         Self(0)
     }
-    
+
     pub(crate) fn increment(&mut self) {
         self.0 += 1;
     }
@@ -115,7 +115,7 @@ pub(crate) enum SmallAny {
 }
 impl SmallAny {
     pub(crate) fn new<T: std::any::Any + 'static>(value: T) -> Self {
-        use std::mem::{size_of, needs_drop, align_of};
+        use std::mem::{align_of, needs_drop, size_of};
         if size_of::<T>() <= 16 && !needs_drop::<T>() && align_of::<T>() <= align_of::<[u8; 16]>() {
             let mut data = [0u8; 16];
             unsafe {
@@ -128,7 +128,7 @@ impl SmallAny {
             Self::Heap(std::rc::Rc::new(value))
         }
     }
-    
+
     pub(crate) fn downcast_ref<T: std::any::Any + 'static>(&self) -> Option<&T> {
         match self {
             Self::Inline(data, type_id) => {

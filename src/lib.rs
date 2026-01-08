@@ -1,12 +1,12 @@
-mod primitive;
 mod node;
+mod primitive;
 mod system;
 
-use primitive::{Version, SmallAny};
-use node::{Node, NodeContext, NodeContextKind, SignalContext, ComputedContext, EffectContext};
+use node::{ComputedContext, EffectContext, Node, NodeContext, NodeContextKind, SignalContext};
+use primitive::{SmallAny, Version};
 
 pub use primitive::Flags;
-pub use system::{get_active_sub, set_active_sub, get_batch_depth, start_batch, end_batch};
+pub use system::{end_batch, get_active_sub, get_batch_depth, set_active_sub, start_batch};
 
 fn update(signal_or_computed: Node) -> bool {
     match signal_or_computed.kind() {
@@ -26,9 +26,11 @@ fn notify(mut effect: Node<EffectContext>) {
         system::with_queued(|q| q.push(effect));
         match effect.subs().map(|s| s.sub()) {
             Some(subs_sub) if (subs_sub.flags() & Flags::WATCHING).is_nonzero() => {
-                effect = subs_sub.try_into().expect("BUG: `subs.sub` of an effect is not effect");
+                effect = subs_sub
+                    .try_into()
+                    .expect("BUG: `subs.sub` of an effect is not effect");
             }
-            _ => break
+            _ => break,
         }
     }
     system::with_queued(|q| q.as_slice_mut()[chain_head_index..].reverse());
@@ -53,28 +55,31 @@ impl<T> Clone for Signal<T> {
 }
 impl<T> Copy for Signal<T> {}
 impl<T: Clone + 'static> Signal<T> {
-    pub fn new(init: T) -> Self where T: PartialEq {
+    pub fn new(init: T) -> Self
+    where
+        T: PartialEq,
+    {
         let node = Node::<SignalContext>::new(init);
         Self(node, std::marker::PhantomData)
-    }    
+    }
     pub fn new_with_eq_fn(init: T, eq_fn: impl Fn(&T, &T) -> bool + 'static) -> Self {
         let node = Node::<SignalContext>::new_with_eq_fn(init, eq_fn);
         Self(node, std::marker::PhantomData)
     }
-    
+
     pub fn get(&self) -> T {
         get_signal_oper(self.0)
     }
-    
+
     pub fn set(&self, value: T) {
         set_signal_oper(self.0, value);
     }
-    
+
     /// set with current value
     pub fn set_with(&self, f: impl FnOnce(&T) -> T) {
         set_with_signal_oper(self.0, f);
     }
-    
+
     pub fn update(&self, f: impl FnOnce(&mut T)) {
         update_signal_oper(self.0, f);
     }
@@ -89,10 +94,13 @@ impl<T> Clone for Computed<T> {
 }
 impl<T> Copy for Computed<T> {}
 impl<T: Clone + 'static> Computed<T> {
-    pub fn new(getter: impl Fn(Option<&T>) -> T + 'static) -> Self where T: PartialEq {
+    pub fn new(getter: impl Fn(Option<&T>) -> T + 'static) -> Self
+    where
+        T: PartialEq,
+    {
         let node = Node::<ComputedContext>::new(getter);
         Self(node, std::marker::PhantomData)
-    }    
+    }
     pub fn new_with_eq(
         getter: impl Fn(Option<&T>) -> T + 'static,
         eq_fn: impl Fn(&T, &T) -> bool + 'static,
@@ -100,13 +108,15 @@ impl<T: Clone + 'static> Computed<T> {
         let node = Node::<ComputedContext>::new_with_eq_fn(getter, eq_fn);
         Self(node, std::marker::PhantomData)
     }
-    
+
     pub fn get(&self) -> T {
         computed_oper(self.0)
     }
 }
 
-pub struct Effect { dispose: Box<dyn FnOnce()> }
+pub struct Effect {
+    dispose: Box<dyn FnOnce()>,
+}
 impl Effect {
     pub fn new(f: impl Fn() + 'static) -> Self {
         let e = Node::<EffectContext>::new(f);
@@ -117,15 +127,19 @@ impl Effect {
         (e.context().run)();
         system::set_active_sub(prev_sub);
         e.update_flags(|f| *f &= !Flags::RECURSED_CHECK);
-        Self { dispose: Box::new(move || effect_oper(e)) }
+        Self {
+            dispose: Box::new(move || effect_oper(e)),
+        }
     }
-    
+
     pub fn dispose(self) {
         (self.dispose)();
     }
 }
 
-pub struct EffectScope { dispose: Box<dyn FnOnce()> }
+pub struct EffectScope {
+    dispose: Box<dyn FnOnce()>,
+}
 impl EffectScope {
     pub fn new(f: impl FnOnce() + 'static) -> Self {
         let e = Node::<NodeContext>::new(Flags::NONE);
@@ -135,9 +149,11 @@ impl EffectScope {
         }
         f();
         system::set_active_sub(prev_sub);
-        Self { dispose: Box::new(move || effect_scope_oper(e.into())) }
+        Self {
+            dispose: Box::new(move || effect_scope_oper(e.into())),
+        }
     }
-    
+
     pub fn dispose(self) {
         (self.dispose)();
     }
@@ -168,26 +184,34 @@ fn update_computed(c: Node<ComputedContext>) -> bool {
     c.set_deps_tail(None);
     c.set_flags(Flags::MUTABLE | Flags::RECURSED_CHECK);
     let prev_sub = system::set_active_sub(Some(c.into()));
-    let ComputedContext { value: old_value, get, eq } = c.context();
-    
+    let ComputedContext {
+        value: old_value,
+        get,
+        eq,
+    } = c.context();
+
     let new_value = get(old_value.as_ref());
-    
+
     let is_changed = match old_value {
         None => true, // initial update
         Some(old_value) => !eq(&old_value, &new_value),
     };
-    
+
     c.update_context(|ctx| ctx.value = Some(new_value));
     system::set_active_sub(prev_sub);
     c.update_flags(|f| *f &= !Flags::RECURSED_CHECK);
     purge_deps(c.into());
-    
+
     is_changed
 }
 
 fn update_signal(s: Node<SignalContext>) -> bool {
     s.set_flags(Flags::MUTABLE);
-    let SignalContext { current_value, pending_value, eq } = s.context();
+    let SignalContext {
+        current_value,
+        pending_value,
+        eq,
+    } = s.context();
     let is_changed = !eq(&current_value, &pending_value);
     s.update_context(|c| c.current_value = c.pending_value.clone());
     is_changed
@@ -195,20 +219,21 @@ fn update_signal(s: Node<SignalContext>) -> bool {
 
 fn run(e: Node<EffectContext>) {
     let flags = e.flags();
-    if (flags & Flags::DIRTY).is_nonzero() || (
-        (flags & Flags::PENDING).is_nonzero() && system::check_dirty(
-            e.deps().expect("BUG: effect node has no `deps` in `run`"),
-            e.into()
-        )
-    ) {
+    if (flags & Flags::DIRTY).is_nonzero()
+        || ((flags & Flags::PENDING).is_nonzero()
+            && system::check_dirty(
+                e.deps().expect("BUG: effect node has no `deps` in `run`"),
+                e.into(),
+            ))
+    {
         system::increment_cycle();
         e.set_deps_tail(None);
         e.set_flags(Flags::WATCHING | Flags::RECURSED_CHECK);
         let prev_sub = system::set_active_sub(Some(e.into()));
         let EffectContext { run } = e.context();
-        
+
         run();
-        
+
         system::set_active_sub(prev_sub);
         e.update_flags(|f| *f &= !Flags::RECURSED_CHECK);
         purge_deps(e.into());
@@ -225,16 +250,19 @@ fn flush() {
 
 fn computed_oper<T: Clone + 'static>(this: Node<ComputedContext>) -> T {
     let flags = this.flags();
-    if (flags & Flags::DIRTY).is_nonzero() || (
-        (flags & Flags::PENDING).is_nonzero() && {
-            if system::check_dirty(this.deps().expect("BUG: `deps` is None in `computed_oper`"), this.into()) {
+    if (flags & Flags::DIRTY).is_nonzero()
+        || ((flags & Flags::PENDING).is_nonzero() && {
+            if system::check_dirty(
+                this.deps().expect("BUG: `deps` is None in `computed_oper`"),
+                this.into(),
+            ) {
                 true
             } else {
                 this.set_flags(flags & !Flags::PENDING);
                 false
             }
-        }
-    ) {
+        })
+    {
         if update_computed(this) {
             if let Some(subs) = this.subs() {
                 system::shallow_propagate(subs);
@@ -244,20 +272,19 @@ fn computed_oper<T: Clone + 'static>(this: Node<ComputedContext>) -> T {
         this.set_flags(Flags::MUTABLE | Flags::RECURSED_CHECK);
         let prev_sub = system::set_active_sub(Some(this.into()));
         let ComputedContext { value, get, eq: _ } = this.context();
-        
+
         let new_value = get(value.as_ref());
 
         this.update_context(|ctx| ctx.value = Some(new_value));
         system::set_active_sub(prev_sub);
         this.update_flags(|f| *f &= !Flags::RECURSED_CHECK);
     }
-    
+
     if let Some(sub) = system::get_active_sub() {
         system::link(this.into(), sub, system::get_cycle());
     }
-    
-    this
-        .context()
+
+    this.context()
         .value
         .as_ref()
         .expect("BUG: computed value is None")
@@ -266,11 +293,7 @@ fn computed_oper<T: Clone + 'static>(this: Node<ComputedContext>) -> T {
         .clone()
 }
 
-fn _set_signal_oper_core<T: 'static>(
-    context: SignalContext,
-    this: Node<SignalContext>,
-    value: T,
-) {
+fn _set_signal_oper_core<T: 'static>(context: SignalContext, this: Node<SignalContext>, value: T) {
     let value = SmallAny::new(value);
     let is_changed = !(context.eq)(&context.pending_value, &value);
     this.update_context(|c| c.pending_value = value);
@@ -285,35 +308,36 @@ fn _set_signal_oper_core<T: 'static>(
     }
 }
 
-fn set_signal_oper<T: 'static>(
-    this: Node<SignalContext>,
-    value: T,
-) {
+fn set_signal_oper<T: 'static>(this: Node<SignalContext>, value: T) {
     _set_signal_oper_core(this.context(), this, value);
 }
 
-fn set_with_signal_oper<T: 'static>(
-    this: Node<SignalContext>,
-    set_with: impl FnOnce(&T) -> T,
-) {
+fn set_with_signal_oper<T: 'static>(this: Node<SignalContext>, set_with: impl FnOnce(&T) -> T) {
     let context = this.context();
     let current_value = context
         .current_value
         .downcast_ref::<T>()
-        .unwrap_or_else(|| panic!("BUG: signal node is not of type {}", std::any::type_name::<T>()));
+        .unwrap_or_else(|| {
+            panic!(
+                "BUG: signal node is not of type {}",
+                std::any::type_name::<T>()
+            )
+        });
     let value = set_with(current_value);
     _set_signal_oper_core(context, this, value);
 }
 
-fn update_signal_oper<T: Clone + 'static>(
-    this: Node<SignalContext>,
-    update: impl FnOnce(&mut T),
-) {
+fn update_signal_oper<T: Clone + 'static>(this: Node<SignalContext>, update: impl FnOnce(&mut T)) {
     let context = this.context();
     let mut current_value = context
         .current_value
         .downcast_ref::<T>()
-        .unwrap_or_else(|| panic!("BUG: signal node is not of type {}", std::any::type_name::<T>()))
+        .unwrap_or_else(|| {
+            panic!(
+                "BUG: signal node is not of type {}",
+                std::any::type_name::<T>()
+            )
+        })
         .clone();
     update(&mut current_value);
     _set_signal_oper_core(context, this, current_value);
@@ -327,7 +351,7 @@ fn get_signal_oper<T: Clone + 'static>(this: Node<SignalContext>) -> T {
             }
         }
     }
-    
+
     let mut sub = system::get_active_sub();
     while let Some(some_sub) = sub {
         if (some_sub.flags() & (Flags::MUTABLE | Flags::WATCHING)).is_nonzero() {
@@ -336,12 +360,16 @@ fn get_signal_oper<T: Clone + 'static>(this: Node<SignalContext>) -> T {
         }
         sub = some_sub.subs().map(|it| it.sub());
     }
-    
-    this
-        .context()
+
+    this.context()
         .current_value
         .downcast_ref::<T>()
-        .unwrap_or_else(|| panic!("BUG: signal node is not of type {}", std::any::type_name::<T>()))
+        .unwrap_or_else(|| {
+            panic!(
+                "BUG: signal node is not of type {}",
+                std::any::type_name::<T>()
+            )
+        })
         .clone()
 }
 
