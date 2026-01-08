@@ -1,5 +1,5 @@
 use crate::node::{EffectContext, Link, LinkInit, Node};
-use crate::primitive::{Flags, Queue, Stack, Version};
+use crate::primitive::{Flags, Queue, Stack, Version, ThreadLocalUnsafeCellExt};
 
 #[derive(Default)]
 struct System {
@@ -10,7 +10,7 @@ struct System {
 }
 
 thread_local! {
-    static SYSTEM: std::cell::RefCell<System> = std::cell::RefCell::new(System::default());
+    static SYSTEM: std::cell::UnsafeCell<System> = std::cell::UnsafeCell::new(System::default());
 }
 
 pub fn set_active_sub(sub: Option<Node>) -> Option<Node> {

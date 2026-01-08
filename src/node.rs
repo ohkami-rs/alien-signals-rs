@@ -1,4 +1,4 @@
-use crate::primitive::{Flags, SmallAny, Version, NonMaxUsize};
+use crate::primitive::{Flags, SmallAny, Version, NonMaxUsize, ThreadLocalUnsafeCellExt};
 
 pub enum NodeContext {
     Signal(SignalContext),
@@ -69,25 +69,6 @@ struct Arena {
 
 thread_local! {
     static ARENA: std::cell::UnsafeCell<Arena> = std::cell::UnsafeCell::new(Arena::default());
-}
-
-trait ThreadLocalUnsafeCellExt<T> {
-    fn with_borrow<R>(&'static self, f: impl FnOnce(&T) -> R) -> R;
-    fn with_borrow_mut<R>(&'static self, f: impl FnOnce(&mut T) -> R) -> R;
-}
-impl<T> ThreadLocalUnsafeCellExt<T> for std::thread::LocalKey<std::cell::UnsafeCell<T>> {
-    fn with_borrow<R>(&'static self, f: impl FnOnce(&T) -> R) -> R {
-        self.with(|uc| {
-            let borrow = unsafe { &*uc.get() };
-            f(borrow)
-        })
-    }
-    fn with_borrow_mut<R>(&'static self, f: impl FnOnce(&mut T) -> R) -> R {
-        self.with(|uc| {
-            let borrow_mut = unsafe { &mut *uc.get() };
-            f(borrow_mut)
-        })
-    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]

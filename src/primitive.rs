@@ -143,6 +143,25 @@ impl SmallAny {
     }
 }
 
+pub(crate) trait ThreadLocalUnsafeCellExt<T> {
+    fn with_borrow<R>(&'static self, f: impl FnOnce(&T) -> R) -> R;
+    fn with_borrow_mut<R>(&'static self, f: impl FnOnce(&mut T) -> R) -> R;
+}
+impl<T> ThreadLocalUnsafeCellExt<T> for std::thread::LocalKey<std::cell::UnsafeCell<T>> {
+    fn with_borrow<R>(&'static self, f: impl FnOnce(&T) -> R) -> R {
+        self.with(|uc| {
+            let borrow = unsafe { &*uc.get() };
+            f(borrow)
+        })
+    }
+    fn with_borrow_mut<R>(&'static self, f: impl FnOnce(&mut T) -> R) -> R {
+        self.with(|uc| {
+            let borrow_mut = unsafe { &mut *uc.get() };
+            f(borrow_mut)
+        })
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) struct NonMaxUsize(std::num::NonZeroUsize);
 impl NonMaxUsize {
