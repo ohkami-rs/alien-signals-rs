@@ -124,47 +124,59 @@ impl Link {
         ARENA.with_borrow_mut(|arena| unsafe { *arena.link.version.get_unchecked_mut(self.0.get()) = version });
     }
 
+    #[inline]
     pub(crate) fn dep(&self) -> Node {
         ARENA.with_borrow(|arena| unsafe { *arena.link.dep.get_unchecked(self.0.get()) })
     }
 
+    #[inline]
     pub(crate) fn sub(&self) -> Node {
         ARENA.with_borrow(|arena| unsafe { *arena.link.sub.get_unchecked(self.0.get()) })
     }
 
+    #[inline]
     pub(crate) fn prev_sub(&self) -> Option<Link> {
         ARENA.with_borrow(|arena| unsafe { *arena.link.prev_sub.get_unchecked(self.0.get()) })
     }
+    #[inline]
     pub(crate) fn set_prev_sub(&self, link: Option<Link>) {
         ARENA.with_borrow_mut(|arena| unsafe { *arena.link.prev_sub.get_unchecked_mut(self.0.get()) = link });
     }
 
+    #[inline]
     pub(crate) fn next_sub(&self) -> Option<Link> {
         ARENA.with_borrow(|arena| unsafe { *arena.link.next_sub.get_unchecked(self.0.get()) })
     }
+    #[inline]
     pub(crate) fn set_next_sub(&self, link: Option<Link>) {
         ARENA.with_borrow_mut(|arena| unsafe { *arena.link.next_sub.get_unchecked_mut(self.0.get()) = link });
     }
 
+    #[inline]
     pub(crate) fn prev_dep(&self) -> Option<Link> {
         ARENA.with_borrow(|arena| unsafe { *arena.link.prev_dep.get_unchecked(self.0.get()) })
     }
+    #[inline]
     pub(crate) fn set_prev_dep(&self, link: Option<Link>) {
         ARENA.with_borrow_mut(|arena| unsafe { *arena.link.prev_dep.get_unchecked_mut(self.0.get()) = link });
     }
 
+    #[inline]
     pub(crate) fn next_dep(&self) -> Option<Link> {
         ARENA.with_borrow(|arena| unsafe { *arena.link.next_dep.get_unchecked(self.0.get()) })
     }
+    #[inline]
     pub(crate) fn set_next_dep(&self, link: Option<Link>) {
         ARENA.with_borrow_mut(|arena| unsafe { *arena.link.next_dep.get_unchecked_mut(self.0.get()) = link });
     }
 }
 
 impl<C> Node<C> {
+    #[inline(always)]
     pub fn flags(&self) -> Flags {
         ARENA.with_borrow(|arena| unsafe { *arena.node.flags.get_unchecked(self.0.get()) })
     }
+    #[inline(always)]
     pub fn set_flags(&self, flags: Flags) {
         ARENA.with_borrow_mut(|arena| unsafe { *arena.node.flags.get_unchecked_mut(self.0.get()) = flags });
     }
@@ -173,34 +185,43 @@ impl<C> Node<C> {
     ///     |f| *f &= !alien_signals::Flags::RECURSED_CHECK
     /// );
     /// ```
+    #[inline(always)]
     pub fn update_flags(&self, f: impl FnOnce(&mut Flags)) {
         ARENA.with_borrow_mut(|arena| f(unsafe { arena.node.flags.get_unchecked_mut(self.0.get()) }));
     }
 
+    #[inline]
     pub(crate) fn deps(&self) -> Option<Link> {
         ARENA.with_borrow(|arena| unsafe { *arena.node.deps.get_unchecked(self.0.get()) })
     }
+    #[inline]
     pub(crate) fn set_deps(&self, link: Option<Link>) {
         ARENA.with_borrow_mut(|arena| unsafe { *arena.node.deps.get_unchecked_mut(self.0.get()) = link });
     }
 
+    #[inline]
     pub(crate) fn deps_tail(&self) -> Option<Link> {
         ARENA.with_borrow(|arena| unsafe { *arena.node.deps_tail.get_unchecked(self.0.get()) })
     }
+    #[inline]
     pub(crate) fn set_deps_tail(&self, link: Option<Link>) {
         ARENA.with_borrow_mut(|arena| unsafe { *arena.node.deps_tail.get_unchecked_mut(self.0.get()) = link });
     }
 
+    #[inline]
     pub(crate) fn subs(&self) -> Option<Link> {
         ARENA.with_borrow(|arena| unsafe { *arena.node.subs.get_unchecked(self.0.get()) })
     }
+    #[inline]
     pub(crate) fn set_subs(&self, link: Option<Link>) {
         ARENA.with_borrow_mut(|arena| unsafe { *arena.node.subs.get_unchecked_mut(self.0.get()) = link });
     }
 
+    #[inline]
     pub(crate) fn subs_tail(&self) -> Option<Link> {
         ARENA.with_borrow(|arena| unsafe { *arena.node.subs_tail.get_unchecked(self.0.get()) })
     }
+    #[inline]
     pub(crate) fn set_subs_tail(&self, link: Option<Link>) {
         ARENA.with_borrow_mut(|arena| unsafe { *arena.node.subs_tail.get_unchecked_mut(self.0.get()) = link });
     }

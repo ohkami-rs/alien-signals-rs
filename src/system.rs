@@ -143,6 +143,7 @@ pub(crate) fn unlink(link: Link, sub: Node) -> Option<Link> {
     next_dep
 }
 
+#[inline]
 pub(crate) fn propagate(mut link: Link) {
     let mut next = link.next_sub();
     let mut stack = Stack::<Option<Link>>::new();
@@ -285,6 +286,7 @@ pub(crate) fn check_dirty(mut link: Link, mut sub: Node) -> bool {
     }
 }
 
+#[inline]
 pub(crate) fn shallow_propagate(mut link: Link) {
     loop {
         let sub = link.sub();
@@ -308,6 +310,7 @@ pub(crate) fn shallow_propagate(mut link: Link) {
     }
 }
 
+#[inline]
 pub(crate) fn is_valid_link(check_link: Link, sub: Node) -> bool {
     let mut link = sub.deps_tail();
     while let Some(some_link) = link {
