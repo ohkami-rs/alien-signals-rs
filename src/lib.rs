@@ -2,7 +2,7 @@ mod primitive;
 mod node;
 mod system;
 
-use primitive::{LinkVersion, SmallAny};
+use primitive::{Version, SmallAny};
 use node::{Node, NodeContext, NodeContextKind, SignalContext, ComputedContext, EffectContext};
 
 pub use primitive::Flags;
@@ -112,7 +112,7 @@ impl Effect {
         let e = Node::<EffectContext>::new(f);
         let prev_sub = system::set_active_sub(Some(e.into()));
         if let Some(prev_sub) = prev_sub {
-            system::link(e.into(), prev_sub, LinkVersion::new());
+            system::link(e.into(), prev_sub, Version::new());
         }
         (e.context().run)();
         system::set_active_sub(prev_sub);
@@ -131,7 +131,7 @@ impl EffectScope {
         let e = Node::<NodeContext>::new(Flags::NONE);
         let prev_sub = system::set_active_sub(e.into());
         if let Some(prev_sub) = prev_sub {
-            system::link(e.into(), prev_sub, LinkVersion::new());
+            system::link(e.into(), prev_sub, Version::new());
         }
         f();
         system::set_active_sub(prev_sub);

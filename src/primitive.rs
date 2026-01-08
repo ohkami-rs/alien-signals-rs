@@ -97,8 +97,8 @@ impl<T> Queue<T> {
 }
 
 #[derive(Default, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct LinkVersion(usize);
-impl LinkVersion {
+pub(crate) struct Version(usize);
+impl Version {
     pub(crate) const fn new() -> Self {
         Self(0)
     }
