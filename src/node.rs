@@ -1,4 +1,4 @@
-use crate::primitive::{Flags, SmallAny, Version, ChunkedArena, ThreadLocalUnsafeCellExt};
+use crate::primitive::{Flags, SmallAny, Version, ChunkedArena, SyncUnsafeCell};
 
 pub enum NodeContext {
     Signal(SignalContext),
@@ -61,15 +61,18 @@ struct NodeFields {
     context: NodeContext,
 }
 
-#[derive(Default)]
 struct Arena {
     link: ChunkedArena<LinkFields, 1024>,
     node: ChunkedArena<NodeFields, 1024>,
 }
 
-thread_local! {
-    static ARENA: std::cell::UnsafeCell<Arena> = std::cell::UnsafeCell::new(Arena::default());
-}
+/// SAFETY: this crate is just intended for single-threaded use
+unsafe impl Sync for Arena {}
+
+static ARENA: SyncUnsafeCell<Arena> = SyncUnsafeCell::new(Arena {
+    link: ChunkedArena::new_const(),
+    node: ChunkedArena::new_const(),
+});
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Link(std::ptr::NonNull<LinkFields>);

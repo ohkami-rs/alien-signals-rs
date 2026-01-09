@@ -1,7 +1,6 @@
 use crate::node::{EffectContext, Link, LinkInit, Node};
-use crate::primitive::{Flags, Queue, Stack, Version, ThreadLocalUnsafeCellExt};
+use crate::primitive::{Flags, Queue, Stack, Version, SyncUnsafeCell};
 
-#[derive(Default)]
 struct System {
     cycle: Version,
     batch_depth: usize,
@@ -9,9 +8,15 @@ struct System {
     queued: Queue<Node<EffectContext>>,
 }
 
-thread_local! {
-    static SYSTEM: std::cell::UnsafeCell<System> = std::cell::UnsafeCell::new(System::default());
-}
+/// SAFETY: This crate is just intended for single-threaded use.
+unsafe impl Sync for System {}
+
+static SYSTEM: SyncUnsafeCell<System> = SyncUnsafeCell::new(System {
+    cycle: Version::new(),
+    batch_depth: 0,
+    active_sub: None,
+    queued: Queue::new(),
+});
 
 #[inline(always)]
 pub fn set_active_sub(sub: Option<Node>) -> Option<Node> {

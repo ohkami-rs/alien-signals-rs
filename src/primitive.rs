@@ -153,22 +153,22 @@ impl SmallAny {
     }
 }
 
-pub(crate) trait ThreadLocalUnsafeCellExt<T> {
-    fn with_borrow<R>(&'static self, f: impl FnOnce(&T) -> R) -> R;
-    fn with_borrow_mut<R>(&'static self, f: impl FnOnce(&mut T) -> R) -> R;
-}
-impl<T> ThreadLocalUnsafeCellExt<T> for std::thread::LocalKey<std::cell::UnsafeCell<T>> {
-    fn with_borrow<R>(&'static self, f: impl FnOnce(&T) -> R) -> R {
-        self.with(|uc| {
-            let borrow = unsafe { &*uc.get() };
-            f(borrow)
-        })
+pub(crate) struct SyncUnsafeCell<T>(std::cell::UnsafeCell<T>);
+unsafe impl<T: Sync> Sync for SyncUnsafeCell<T> {}
+impl<T> SyncUnsafeCell<T> {
+    pub(crate) const fn new(value: T) -> Self {
+        Self(std::cell::UnsafeCell::new(value))
     }
-    fn with_borrow_mut<R>(&'static self, f: impl FnOnce(&mut T) -> R) -> R {
-        self.with(|uc| {
-            let borrow_mut = unsafe { &mut *uc.get() };
-            f(borrow_mut)
-        })
+    
+    #[inline(always)]
+    pub(crate) fn with_borrow<R>(&'static self, f: impl FnOnce(&T) -> R) -> R {
+        let borrow = unsafe { &*self.0.get() };
+        f(borrow)
+    }
+    #[inline(always)]
+    pub(crate) fn with_borrow_mut<R>(&'static self, f: impl FnOnce(&mut T) -> R) -> R {
+        let borrow_mut = unsafe { &mut *self.0.get() };
+        f(borrow_mut)
     }
 }
 
@@ -178,18 +178,32 @@ pub(crate) struct ChunkedArena<T, const CHUNK_SIZE: usize> {
     next_slot_index: usize,
 }
 impl<T, const CHUNK_SIZE: usize> ChunkedArena<T, CHUNK_SIZE> {
-    pub(crate) fn new() -> Self {
-        assert!(CHUNK_SIZE > 0, "CHUNK_SIZE must be >= 1");
-        
-        let first_chunk = Box::new([const { std::mem::MaybeUninit::uninit() }; CHUNK_SIZE]);
-        Self {
-            chunks: vec![first_chunk],
-            current_chunk_index: 0,
-            next_slot_index: 0,
+    #[cold]
+    fn make_first_chunk(&mut self) {
+        if self.chunks.is_empty() {
+            self.chunks.push(Box::new([const { std::mem::MaybeUninit::uninit() }; CHUNK_SIZE]));
         }
     }
+    
+    /// Const variant of [`Self::new`].
+    /// This doesn't allocate the first chunk to be const fn.
+    pub(crate) const fn new_const() -> Self {
+        assert!(CHUNK_SIZE > 0, "CHUNK_SIZE must be >= 1");
+        Self { chunks: Vec::new(), current_chunk_index: 0, next_slot_index: 0 }
+    }
 
+    pub(crate) fn new() -> Self {
+        let mut this = Self::new_const();
+        this.make_first_chunk();
+        this
+    }
+    
     pub(crate) fn alloc(&mut self, value: T) -> std::ptr::NonNull<T> {
+        // for the case of `new_const`
+        if self.chunks.is_empty() {
+            self.make_first_chunk();
+        }
+        
         if self.next_slot_index >= CHUNK_SIZE {
             self.chunks.push(Box::new([const { std::mem::MaybeUninit::uninit() }; CHUNK_SIZE]));
             self.current_chunk_index += 1;
