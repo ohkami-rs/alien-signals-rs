@@ -293,7 +293,7 @@ fn computed_oper<T: Clone + 'static>(this: Node<ComputedContext>) -> T {
         .clone()
 }
 
-fn _set_signal_oper_core<T: 'static>(context: SignalContext, this: Node<SignalContext>, value: T) {
+fn _set_signal_oper_core<T: 'static>(context: &SignalContext, this: Node<SignalContext>, value: T) {
     let value = SmallAny::new(value);
     let is_changed = !(context.eq)(&context.pending_value, &value);
     this.update_context(|c| c.pending_value = value);
