@@ -65,10 +65,12 @@ impl<T> Stack<T> {
         Self(Vec::new())
     }
 
+    #[inline]
     pub(crate) fn pop(&mut self) -> Option<T> {
         self.0.pop()
     }
 
+    #[inline]
     pub(crate) fn push(&mut self, item: T) {
         self.0.push(item);
     }
@@ -173,6 +175,7 @@ impl<T> ThreadLocalUnsafeCellExt<T> for std::thread::LocalKey<std::cell::UnsafeC
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) struct NonMaxUsize(std::num::NonZeroUsize);
 impl NonMaxUsize {
+    #[inline]
     pub(crate) const fn new(value: usize) -> Option<Self> {
         match std::num::NonZeroUsize::new(value ^ std::usize::MAX) {
             Some(nz) => Some(Self(nz)),
