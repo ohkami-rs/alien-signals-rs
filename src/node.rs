@@ -1,4 +1,4 @@
-use crate::primitive::{Flags, SmallAny, Version, NonMaxUsize, ThreadLocalUnsafeCellExt};
+use crate::primitive::{Flags, SmallAny, Version, NonMaxUsize, ChunkedArena, ThreadLocalUnsafeCellExt};
 
 pub enum NodeContext {
     Signal(SignalContext),
@@ -13,6 +13,16 @@ pub(crate) enum NodeContextKind {
     Computed,
     Effect,
     None,
+}
+impl NodeContext {
+    pub(crate) fn kind(&self) -> NodeContextKind {
+        match self {
+            NodeContext::Signal(_) => NodeContextKind::Signal,
+            NodeContext::Computed(_) => NodeContextKind::Computed,
+            NodeContext::Effect(_) => NodeContextKind::Effect,
+            NodeContext::None => NodeContextKind::None,
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -34,37 +44,57 @@ pub struct EffectContext {
     pub(crate) run: std::rc::Rc<dyn Fn()>,
 }
 
-/// SoA representation of a series of links
-#[derive(Default)]
-struct LinkArena {
-    version: Vec<Version>,
-    dep: Vec<Node>,
-    sub: Vec<Node>,
-    prev_sub: Vec<Option<Link>>,
-    next_sub: Vec<Option<Link>>,
-    prev_dep: Vec<Option<Link>>,
-    next_dep: Vec<Option<Link>>,
-}
+// /// SoA representation of a series of links
+// #[derive(Default)]
+// struct LinkArena {
+//     version: Vec<Version>,
+//     dep: Vec<Node>,
+//     sub: Vec<Node>,
+//     prev_sub: Vec<Option<Link>>,
+//     next_sub: Vec<Option<Link>>,
+//     prev_dep: Vec<Option<Link>>,
+//     next_dep: Vec<Option<Link>>,
+// }
 
-/// SoA representation of a series of nodes
-#[derive(Default)]
-struct NodeArena {
-    flags: Vec<Flags>,
-    deps: Vec<Option<Link>>,
-    deps_tail: Vec<Option<Link>>,
-    subs: Vec<Option<Link>>,
-    subs_tail: Vec<Option<Link>>,
-    context_indices: Vec<(NodeContextKind, usize)>,
-    /* */
-    signals: Vec<SignalContext>,
-    computeds: Vec<ComputedContext>,
-    effects: Vec<EffectContext>,
+struct LinkFields {
+    version: Version,
+    dep: Node,
+    sub: Node,
+    prev_sub: Option<Link>,
+    next_sub: Option<Link>,
+    prev_dep: Option<Link>,
+    next_dep: Option<Link>,
+}
+const _: () = assert!(std::mem::size_of::<LinkFields>() == 7 * std::mem::size_of::<usize>());
+
+// /// SoA representation of a series of nodes
+// #[derive(Default)]
+// struct NodeArena {
+//     flags: Vec<Flags>,
+//     deps: Vec<Option<Link>>,
+//     deps_tail: Vec<Option<Link>>,
+//     subs: Vec<Option<Link>>,
+//     subs_tail: Vec<Option<Link>>,
+//     context_indices: Vec<(NodeContextKind, usize)>,
+//     /* */
+//     signals: Vec<SignalContext>,
+//     computeds: Vec<ComputedContext>,
+//     effects: Vec<EffectContext>,
+// }
+
+struct NodeFields {
+    flags: Flags,
+    deps: Option<Link>,
+    deps_tail: Option<Link>,
+    subs: Option<Link>,
+    subs_tail: Option<Link>,
+    context: NodeContext,
 }
 
 #[derive(Default)]
 struct Arena {
-    link: LinkArena,
-    node: NodeArena,
+    link: ChunkedArena<LinkFields, 4096>,
+    node: ChunkedArena<NodeFields, 4096>,
 }
 
 thread_local! {
@@ -72,11 +102,14 @@ thread_local! {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub(crate) struct Link(NonMaxUsize);
-const _: () = assert!(std::mem::size_of::<Option<Link>>() == 8);
+pub(crate) struct Link(std::ptr::NonNull<LinkFields>);
+const _: () = assert!(std::mem::size_of::<Link>() == std::mem::size_of::<usize>());
+const _: () = assert!(std::mem::size_of::<Option<Link>>() == std::mem::size_of::<usize>());
 
-pub struct Node<C = NodeContext>(NonMaxUsize, std::marker::PhantomData<C>);
-const _: () = assert!(std::mem::size_of::<Node>() == 8);
+pub struct Node<C = NodeContext>(std::ptr::NonNull<NodeFields>, std::marker::PhantomData<C>);
+const _: () = assert!(std::mem::size_of::<Node>() == std::mem::size_of::<usize>());
+const _: () = assert!(std::mem::size_of::<Option<Node>>() == std::mem::size_of::<usize>());
+
 /// not requiring `C: Clone`
 impl<C> Clone for Node<C> {
     fn clone(&self) -> Self {
@@ -105,147 +138,146 @@ pub(crate) struct LinkInit {
 impl Link {
     pub(crate) fn new(init: LinkInit) -> Self {
         ARENA.with_borrow_mut(|arena| {
-            let index = arena.link.version.len();
-            arena.link.version.push(init.version);
-            arena.link.dep.push(init.dep);
-            arena.link.sub.push(init.sub);
-            arena.link.prev_sub.push(init.prev_sub);
-            arena.link.next_sub.push(init.next_sub);
-            arena.link.prev_dep.push(init.prev_dep);
-            arena.link.next_dep.push(init.next_dep);
-            Link(NonMaxUsize::new(index).expect("Link index overflow"))
+            let ptr = arena.link.alloc(LinkFields {
+                version: init.version,
+                dep: init.dep,
+                sub: init.sub,
+                prev_sub: init.prev_sub,
+                next_sub: init.next_sub,
+                prev_dep: init.prev_dep,
+                next_dep: init.next_dep,
+            });
+            Link(ptr)
         })
     }
 
     pub(crate) fn version(&self) -> Version {
-        ARENA.with_borrow(|arena| unsafe { *arena.link.version.get_unchecked(self.0.get()) })
+        unsafe { &*self.0.as_ptr() }.version
     }
     pub(crate) fn set_version(&self, version: Version) {
-        ARENA.with_borrow_mut(|arena| unsafe { *arena.link.version.get_unchecked_mut(self.0.get()) = version });
+        unsafe { &mut *self.0.as_ptr() }.version = version;
     }
 
     #[inline]
     pub(crate) fn dep(&self) -> Node {
-        ARENA.with_borrow(|arena| unsafe { *arena.link.dep.get_unchecked(self.0.get()) })
+        unsafe { &*self.0.as_ptr() }.dep
     }
 
     #[inline]
     pub(crate) fn sub(&self) -> Node {
-        ARENA.with_borrow(|arena| unsafe { *arena.link.sub.get_unchecked(self.0.get()) })
+        unsafe { &*self.0.as_ptr() }.sub
     }
 
     #[inline]
     pub(crate) fn prev_sub(&self) -> Option<Link> {
-        ARENA.with_borrow(|arena| unsafe { *arena.link.prev_sub.get_unchecked(self.0.get()) })
+        unsafe { &*self.0.as_ptr() }.prev_sub
     }
     #[inline]
     pub(crate) fn set_prev_sub(&self, link: Option<Link>) {
-        ARENA.with_borrow_mut(|arena| unsafe { *arena.link.prev_sub.get_unchecked_mut(self.0.get()) = link });
+        unsafe { &mut *self.0.as_ptr() }.prev_sub = link;
     }
 
     #[inline]
     pub(crate) fn next_sub(&self) -> Option<Link> {
-        ARENA.with_borrow(|arena| unsafe { *arena.link.next_sub.get_unchecked(self.0.get()) })
+        unsafe { &*self.0.as_ptr() }.next_sub
     }
     #[inline]
     pub(crate) fn set_next_sub(&self, link: Option<Link>) {
-        ARENA.with_borrow_mut(|arena| unsafe { *arena.link.next_sub.get_unchecked_mut(self.0.get()) = link });
+        unsafe { &mut *self.0.as_ptr() }.next_sub = link;
     }
 
     #[inline]
     pub(crate) fn prev_dep(&self) -> Option<Link> {
-        ARENA.with_borrow(|arena| unsafe { *arena.link.prev_dep.get_unchecked(self.0.get()) })
+        unsafe { &*self.0.as_ptr() }.prev_dep
     }
     #[inline]
     pub(crate) fn set_prev_dep(&self, link: Option<Link>) {
-        ARENA.with_borrow_mut(|arena| unsafe { *arena.link.prev_dep.get_unchecked_mut(self.0.get()) = link });
+        unsafe { &mut *self.0.as_ptr() }.prev_dep = link;
     }
 
     #[inline]
     pub(crate) fn next_dep(&self) -> Option<Link> {
-        ARENA.with_borrow(|arena| unsafe { *arena.link.next_dep.get_unchecked(self.0.get()) })
+        unsafe { &*self.0.as_ptr() }.next_dep
     }
     #[inline]
     pub(crate) fn set_next_dep(&self, link: Option<Link>) {
-        ARENA.with_borrow_mut(|arena| unsafe { *arena.link.next_dep.get_unchecked_mut(self.0.get()) = link });
+        unsafe { &mut *self.0.as_ptr() }.next_dep = link;
     }
 }
 
 impl<C> Node<C> {
     #[inline(always)]
     pub fn flags(&self) -> Flags {
-        ARENA.with_borrow(|arena| unsafe { *arena.node.flags.get_unchecked(self.0.get()) })
+        unsafe { &*self.0.as_ptr() }.flags
     }
     #[inline(always)]
     pub fn set_flags(&self, flags: Flags) {
-        ARENA.with_borrow_mut(|arena| unsafe { *arena.node.flags.get_unchecked_mut(self.0.get()) = flags });
+        unsafe { &mut *self.0.as_ptr() }.flags = flags;
     }
-    /// ```rust
+    /// ```rust,no_run
     /// alien_signals::get_active_sub().unwrap().update_flags(
     ///     |f| *f &= !alien_signals::Flags::RECURSED_CHECK
     /// );
     /// ```
     #[inline(always)]
     pub fn update_flags(&self, f: impl FnOnce(&mut Flags)) {
-        ARENA.with_borrow_mut(|arena| f(unsafe { arena.node.flags.get_unchecked_mut(self.0.get()) }));
+        f(&mut unsafe { &mut *self.0.as_ptr() }.flags);
     }
 
     #[inline]
     pub(crate) fn deps(&self) -> Option<Link> {
-        ARENA.with_borrow(|arena| unsafe { *arena.node.deps.get_unchecked(self.0.get()) })
+        unsafe { &*self.0.as_ptr() }.deps
     }
     #[inline]
     pub(crate) fn set_deps(&self, link: Option<Link>) {
-        ARENA.with_borrow_mut(|arena| unsafe { *arena.node.deps.get_unchecked_mut(self.0.get()) = link });
+        unsafe { &mut *self.0.as_ptr() }.deps = link;
     }
 
     #[inline]
     pub(crate) fn deps_tail(&self) -> Option<Link> {
-        ARENA.with_borrow(|arena| unsafe { *arena.node.deps_tail.get_unchecked(self.0.get()) })
+        unsafe { &*self.0.as_ptr() }.deps_tail
     }
     #[inline]
     pub(crate) fn set_deps_tail(&self, link: Option<Link>) {
-        ARENA.with_borrow_mut(|arena| unsafe { *arena.node.deps_tail.get_unchecked_mut(self.0.get()) = link });
+        unsafe { &mut *self.0.as_ptr() }.deps_tail = link;
     }
 
     #[inline]
     pub(crate) fn subs(&self) -> Option<Link> {
-        ARENA.with_borrow(|arena| unsafe { *arena.node.subs.get_unchecked(self.0.get()) })
+        unsafe { &*self.0.as_ptr() }.subs
     }
     #[inline]
     pub(crate) fn set_subs(&self, link: Option<Link>) {
-        ARENA.with_borrow_mut(|arena| unsafe { *arena.node.subs.get_unchecked_mut(self.0.get()) = link });
+        unsafe { &mut *self.0.as_ptr() }.subs = link;
     }
 
     #[inline]
     pub(crate) fn subs_tail(&self) -> Option<Link> {
-        ARENA.with_borrow(|arena| unsafe { *arena.node.subs_tail.get_unchecked(self.0.get()) })
+        unsafe { &*self.0.as_ptr() }.subs_tail
     }
     #[inline]
     pub(crate) fn set_subs_tail(&self, link: Option<Link>) {
-        ARENA.with_borrow_mut(|arena| unsafe { *arena.node.subs_tail.get_unchecked_mut(self.0.get()) = link });
+        unsafe { &mut *self.0.as_ptr() }.subs_tail = link;
     }
 }
 
 impl Node<NodeContext> {
     pub(crate) fn new(flags: Flags) -> Self {
         ARENA.with_borrow_mut(|arena| {
-            let index = arena.node.flags.len();
-            arena.node.flags.push(flags);
-            arena.node.deps.push(None);
-            arena.node.deps_tail.push(None);
-            arena.node.subs.push(None);
-            arena.node.subs_tail.push(None);
-            arena.node.context_indices.push((NodeContextKind::None, 0));
-            Node(
-                NonMaxUsize::new(index).expect("Node index overflow"),
-                std::marker::PhantomData
-            )
+            let ptr = arena.node.alloc(NodeFields {
+                flags,
+                deps: None,
+                deps_tail: None,
+                subs: None,
+                subs_tail: None,
+                context: NodeContext::None,
+            });
+            Node(ptr, std::marker::PhantomData)
         })
     }
 
     pub(crate) fn kind(&self) -> NodeContextKind {
-        ARENA.with_borrow(|arena| arena.node.context_indices[self.0.get()].0)
+        unsafe { &*self.0.as_ptr() }.context.kind()
     }
 }
 
@@ -259,18 +291,7 @@ impl Node<SignalContext> {
     ) -> Self {
         ARENA.with_borrow_mut(|arena| {
             let init = SmallAny::new(init);
-            let index = arena.node.flags.len();
-            let context_index = arena.node.signals.len();
-            arena.node.flags.push(Flags::MUTABLE);
-            arena.node.deps.push(None);
-            arena.node.deps_tail.push(None);
-            arena.node.subs.push(None);
-            arena.node.subs_tail.push(None);
-            arena
-                .node
-                .context_indices
-                .push((NodeContextKind::Signal, context_index));
-            arena.node.signals.push(SignalContext {
+            let context = NodeContext::Signal(SignalContext {
                 current_value: init.clone(),
                 pending_value: init,
                 eq: std::rc::Rc::new(move |a, b| {
@@ -283,30 +304,29 @@ impl Node<SignalContext> {
                     eq_fn(a, b)
                 }),
             });
-            Node(
-                NonMaxUsize::new(index).expect("Node index overflow"),
-                std::marker::PhantomData
-            )
+            let ptr = arena.node.alloc(NodeFields {
+                flags: Flags::MUTABLE,
+                deps: None,
+                deps_tail: None,
+                subs: None,
+                subs_tail: None,
+                context,
+            });
+            Node(ptr, std::marker::PhantomData)
         })
     }
 
     pub(crate) fn context(&self) -> SignalContext {
-        ARENA.with_borrow(|arena| {
-            let (kind, index) = arena.node.context_indices[self.0.get()];
-            match kind {
-                NodeContextKind::Signal => arena.node.signals[index].clone(),
-                _ => panic!("BUG: Node is not a Signal"),
-            }
-        })
+        match unsafe { &*self.0.as_ptr() }.context {
+            NodeContext::Signal(ref ctx) => ctx.clone(),
+            _ => panic!("BUG: Node is not a Signal"),
+        }
     }
     pub(crate) fn update_context(&self, f: impl FnOnce(&mut SignalContext)) {
-        ARENA.with_borrow_mut(|arena| {
-            let (kind, index) = arena.node.context_indices[self.0.get()];
-            match kind {
-                NodeContextKind::Signal => f(&mut arena.node.signals[index]),
-                _ => panic!("BUG: Node is not a Signal"),
-            }
-        });
+        match unsafe { &mut *self.0.as_ptr() }.context {
+            NodeContext::Signal(ref mut ctx) => f(ctx),
+            _ => panic!("BUG: Node is not a Signal"),
+        }
     }
 }
 impl Node<ComputedContext> {
@@ -318,9 +338,7 @@ impl Node<ComputedContext> {
         eq_fn: impl Fn(&T, &T) -> bool + 'static,
     ) -> Self {
         ARENA.with_borrow_mut(|arena| {
-            let index = arena.node.flags.len();
-            let context_index = arena.node.computeds.len();
-            arena.node.computeds.push(ComputedContext {
+            let context = NodeContext::Computed(ComputedContext {
                 value: None,
                 get: std::rc::Rc::new(move |prev_any| {
                     let prev_t = prev_any.map(|any| {
@@ -341,77 +359,55 @@ impl Node<ComputedContext> {
                     eq_fn(a, b)
                 }),
             });
-            arena
-                .node
-                .context_indices
-                .push((NodeContextKind::Computed, context_index));
-            arena.node.flags.push(Flags::NONE);
-            arena.node.deps.push(None);
-            arena.node.deps_tail.push(None);
-            arena.node.subs.push(None);
-            arena.node.subs_tail.push(None);
-            Node(
-                NonMaxUsize::new(index).expect("Node index overflow"),
-                std::marker::PhantomData
-            )
+            let ptr = arena.node.alloc(NodeFields {
+                flags: Flags::NONE,
+                deps: None,
+                deps_tail: None,
+                subs: None,
+                subs_tail: None,
+                context,
+            });
+            Node(ptr, std::marker::PhantomData)
         })
     }
 
     pub(crate) fn context(&self) -> ComputedContext {
-        ARENA.with_borrow(|arena| {
-            let (kind, index) = arena.node.context_indices[self.0.get()];
-            match kind {
-                NodeContextKind::Computed => arena.node.computeds[index].clone(),
-                _ => panic!("BUG: Node is not a Computed"),
-            }
-        })
+        match unsafe { &*self.0.as_ptr() }.context {
+            NodeContext::Computed(ref ctx) => ctx.clone(),
+            _ => panic!("BUG: Node is not a Computed"),
+        }
     }
     pub(crate) fn update_context(&self, f: impl FnOnce(&mut ComputedContext)) {
-        ARENA.with_borrow_mut(|arena| {
-            let (kind, index) = arena.node.context_indices[self.0.get()];
-            match kind {
-                NodeContextKind::Computed => f(&mut arena.node.computeds[index]),
-                _ => panic!("BUG: Node is not a Computed"),
-            }
-        });
+        match unsafe { &mut *self.0.as_ptr() }.context {
+            NodeContext::Computed(ref mut ctx) => f(ctx),
+            _ => panic!("BUG: Node is not a Computed"),
+        }
     }
 }
 
 impl Node<EffectContext> {
     pub(crate) fn new(f: impl Fn() + 'static) -> Self {
         ARENA.with_borrow_mut(|arena| {
-            let index = arena.node.flags.len();
-            let context_index = arena.node.effects.len();
-            arena.node.effects.push(EffectContext {
+            let context = NodeContext::Effect(EffectContext {
                 run: std::rc::Rc::new(f),
             });
-            arena
-                .node
-                .context_indices
-                .push((NodeContextKind::Effect, context_index));
-            arena
-                .node
-                .flags
-                .push(Flags::WATCHING | Flags::RECURSED_CHECK);
-            arena.node.deps.push(None);
-            arena.node.deps_tail.push(None);
-            arena.node.subs.push(None);
-            arena.node.subs_tail.push(None);
-            Node(
-                NonMaxUsize::new(index).expect("Node index overflow"),
-                std::marker::PhantomData
-            )
+            let ptr = arena.node.alloc(NodeFields {
+                flags: Flags::WATCHING | Flags::RECURSED_CHECK,
+                deps: None,
+                deps_tail: None,
+                subs: None,
+                subs_tail: None,
+                context,
+            });
+            Node(ptr, std::marker::PhantomData)
         })
     }
 
     pub(crate) fn context(&self) -> EffectContext {
-        ARENA.with_borrow(|arena| {
-            let (kind, index) = arena.node.context_indices[self.0.get()];
-            match kind {
-                NodeContextKind::Effect => arena.node.effects[index].clone(),
-                _ => panic!("BUG: Node is not an Effect"),
-            }
-        })
+        match unsafe { &*self.0.as_ptr() }.context {
+            NodeContext::Effect(ref ctx) => ctx.clone(),
+            _ => panic!("BUG: Node is not an Effect"),
+        }
     }
 }
 
@@ -434,7 +430,7 @@ impl From<Node<EffectContext>> for Node<NodeContext> {
 impl TryFrom<Node<NodeContext>> for Node<SignalContext> {
     type Error = ();
     fn try_from(node: Node<NodeContext>) -> Result<Self, Self::Error> {
-        match ARENA.with_borrow(|arena| arena.node.context_indices[node.0.get()].0) {
+        match unsafe { &*node.0.as_ptr() }.context.kind() {
             NodeContextKind::Signal => Ok(Node(node.0, std::marker::PhantomData)),
             _ => Err(()),
         }
@@ -443,7 +439,7 @@ impl TryFrom<Node<NodeContext>> for Node<SignalContext> {
 impl TryFrom<Node<NodeContext>> for Node<ComputedContext> {
     type Error = ();
     fn try_from(node: Node<NodeContext>) -> Result<Self, Self::Error> {
-        match ARENA.with_borrow(|arena| arena.node.context_indices[node.0.get()].0) {
+        match unsafe { &*node.0.as_ptr() }.context.kind() {
             NodeContextKind::Computed => Ok(Node(node.0, std::marker::PhantomData)),
             _ => Err(()),
         }
@@ -452,7 +448,7 @@ impl TryFrom<Node<NodeContext>> for Node<ComputedContext> {
 impl TryFrom<Node<NodeContext>> for Node<EffectContext> {
     type Error = ();
     fn try_from(node: Node<NodeContext>) -> Result<Self, Self::Error> {
-        match ARENA.with_borrow(|arena| arena.node.context_indices[node.0.get()].0) {
+        match unsafe { &*node.0.as_ptr() }.context.kind() {
             NodeContextKind::Effect => Ok(Node(node.0, std::marker::PhantomData)),
             _ => Err(()),
         }
