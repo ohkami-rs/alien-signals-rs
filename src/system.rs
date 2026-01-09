@@ -1,5 +1,5 @@
 use crate::node::{EffectContext, Link, LinkInit, Node};
-use crate::primitive::{Flags, Queue, Stack, Version, ThreadLocalUnsafeCellExt};
+use crate::primitive::{Flags, Queue, Version, ThreadLocalUnsafeCellExt};
 
 #[derive(Default)]
 struct System {
@@ -152,16 +152,12 @@ pub(crate) fn unlink(link: Link, sub: Node) -> Option<Link> {
 }
 
 pub(crate) fn propagate(mut link: Link) {
-    let mut next = link.next_sub();
-    let mut stack = Stack::<Option<Link>>::new();
-
-    'top: loop {
+    loop {
         let sub = link.sub();
         let mut flags = sub.flags();
 
-        if (flags & (Flags::RECURSED_CHECK | Flags::RECURSED | Flags::DIRTY | Flags::PENDING))
-            .is_zero()
-        {
+        // 1. フラグ処理（ロジックはそのまま）
+        if (flags & (Flags::RECURSED_CHECK | Flags::RECURSED | Flags::DIRTY | Flags::PENDING)).is_zero() {
             sub.set_flags(flags | Flags::PENDING);
         } else if (flags & (Flags::RECURSED_CHECK | Flags::RECURSED)).is_zero() {
             flags = Flags::NONE;
@@ -175,122 +171,66 @@ pub(crate) fn propagate(mut link: Link) {
         }
 
         if (flags & Flags::WATCHING).is_nonzero() {
-            super::notify(
-                sub.try_into()
-                    .expect("BUG: `sub` is not effect in `propagate`"),
-            );
+            super::notify(sub.try_into().expect("BUG: `sub` is not effect in `propagate`"));
         }
 
+        // 2. 子ノードへの再帰 (Mutableなら深掘り)
         if (flags & Flags::MUTABLE).is_nonzero() {
             if let Some(sub_subs) = sub.subs() {
-                link = sub_subs;
-                if let Some(next_sub) = sub_subs.next_sub() {
-                    stack.push(next);
-                    next = Some(next_sub);
-                }
-                continue;
+                propagate(sub_subs); // 再帰呼び出し
             }
         }
 
-        if let Some(some_next) = next {
-            link = some_next;
-            next = link.next_sub();
-            continue;
+        // 3. 次の兄弟へ (Tail Call Optimization のような形)
+        if let Some(next) = link.next_sub() {
+            link = next;
+        } else {
+            break;
         }
-
-        while let Some(popped_link_opt) = stack.pop() {
-            if let Some(popped_link) = popped_link_opt {
-                link = popped_link;
-                next = link.next_sub();
-                continue 'top;
-            }
-        }
-
-        break;
     }
 }
 
-pub(crate) fn check_dirty(mut link: Link, mut sub: Node) -> bool {
-    let mut stack = Stack::<Link>::new();
-    let mut check_depth = 0;
-    let mut dirty = false;
+// 1. 引数に sub: Node を復活させる
+pub(crate) fn check_dirty(mut link: Option<Link>, sub: Node) -> bool {
+    while let Some(l) = link {
+        // [FIX] ループの各ステップで、自分自身(sub)が副作用で Dirty になっていないか確認する
+        if (sub.flags() & Flags::DIRTY).is_nonzero() {
+            return true;
+        }
 
-    'top: loop {
-        let dep = link.dep();
+        let dep = l.dep();
         let flags = dep.flags();
 
-        if (sub.flags() & Flags::DIRTY).is_nonzero() {
-            dirty = true;
-        } else if (flags & (Flags::MUTABLE | Flags::DIRTY)) == (Flags::MUTABLE | Flags::DIRTY) {
+        if (flags & (Flags::MUTABLE | Flags::DIRTY)) == (Flags::MUTABLE | Flags::DIRTY) {
             if super::update(dep) {
-                let subs = dep
-                    .subs()
-                    .expect("BUG: no `dep.subs` in `MUTABLE | DIRTY` path");
-                if subs.next_sub().is_some() {
-                    shallow_propagate(subs);
+                if let Some(subs) = dep.subs() {
+                    if subs.next_sub().is_some() {
+                        shallow_propagate(subs);
+                    }
                 }
-                dirty = true;
+                return true;
             }
         } else if (flags & (Flags::MUTABLE | Flags::PENDING)) == (Flags::MUTABLE | Flags::PENDING) {
-            if link.next_sub().is_some() || link.prev_sub().is_some() {
-                stack.push(link);
-            }
-            link = dep
-                .deps()
-                .expect("BUG: no `dep.deps` in `MUTABLE | PENDING` path");
-            sub = dep;
-            check_depth += 1;
-            continue;
-        }
-
-        if !dirty {
-            if let Some(next_dep) = link.next_dep() {
-                link = next_dep;
-                continue;
-            }
-        }
-
-        while check_depth > 0 {
-            let first_sub = sub.subs().expect("BUG: no `sub.subs` while check_deps > 0");
-            let has_multiple_subs = first_sub.next_sub().is_some();
-
-            if has_multiple_subs {
-                link = stack
-                    .pop()
-                    .expect("BUG: no `stack` item in `has_multiple_subs` path");
-            } else {
-                link = first_sub;
-            }
-
-            if dirty {
-                if super::update(sub) {
-                    if has_multiple_subs {
-                        shallow_propagate(first_sub);
+            // 再帰呼び出しにも dep (次のsub) を渡す
+            if check_dirty(dep.deps(), dep) {
+                if super::update(dep) {
+                    if let Some(subs) = dep.subs() {
+                        if subs.next_sub().is_some() {
+                            shallow_propagate(subs);
+                        }
                     }
-                    sub = link.sub();
-
-                    check_depth -= 1;
-                    continue;
+                    return true;
                 }
-                dirty = false;
             } else {
-                sub.update_flags(|f| *f &= !Flags::PENDING);
+                dep.update_flags(|f| *f &= !Flags::PENDING);
             }
-
-            sub = link.sub();
-            if let Some(next_dep) = link.next_dep() {
-                link = next_dep;
-
-                check_depth -= 1;
-                continue 'top;
-            }
-
-            check_depth -= 1;
-            continue;
         }
 
-        return dirty;
+        link = l.next_dep();
     }
+
+    // ループ終了時にも最終確認
+    (sub.flags() & Flags::DIRTY).is_nonzero()
 }
 
 #[inline]

@@ -53,29 +53,6 @@ impl std::ops::BitOrAssign for Flags {
     }
 }
 
-pub(crate) struct Stack<T>(Vec<T>);
-// not requiring `T: Clone`
-impl<T> Default for Stack<T> {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-impl<T> Stack<T> {
-    pub(crate) const fn new() -> Self {
-        Self(Vec::new())
-    }
-
-    #[inline]
-    pub(crate) fn pop(&mut self) -> Option<T> {
-        self.0.pop()
-    }
-
-    #[inline]
-    pub(crate) fn push(&mut self, item: T) {
-        self.0.push(item);
-    }
-}
-
 pub(crate) struct Queue<T>(std::collections::VecDeque<T>);
 // not requiring `T: Clone`
 impl<T> Default for Queue<T> {

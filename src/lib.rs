@@ -222,7 +222,7 @@ fn run(e: Node<EffectContext>) {
     if (flags & Flags::DIRTY).is_nonzero()
         || ((flags & Flags::PENDING).is_nonzero()
             && system::check_dirty(
-                e.deps().expect("BUG: effect node has no `deps` in `run`"),
+                e.deps(),
                 e.into(),
             ))
     {
@@ -253,7 +253,7 @@ fn computed_oper<T: Clone + 'static>(this: Node<ComputedContext>) -> T {
     if (flags & Flags::DIRTY).is_nonzero()
         || ((flags & Flags::PENDING).is_nonzero() && {
             if system::check_dirty(
-                this.deps().expect("BUG: `deps` is None in `computed_oper`"),
+                this.deps(),
                 this.into(),
             ) {
                 true
