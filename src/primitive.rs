@@ -54,7 +54,7 @@ impl std::ops::BitOrAssign for Flags {
 }
 
 pub(crate) struct Stack<T>(Vec<T>);
-// not requiring `T: Clone`
+/// not requiring `T: Default`
 impl<T> Default for Stack<T> {
     fn default() -> Self {
         Self::new()
