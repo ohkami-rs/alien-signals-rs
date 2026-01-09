@@ -10,37 +10,44 @@ impl Flags {
     pub const PENDING: Self = Self(1 << 5);
 }
 impl Flags {
+    #[inline(always)]
     pub(crate) const fn is_zero(self) -> bool {
         self.0 == 0
     }
+    #[inline(always)]
     pub(crate) const fn is_nonzero(self) -> bool {
         self.0 != 0
     }
 }
 impl std::ops::Not for Flags {
     type Output = Self;
+    #[inline(always)]
     fn not(self) -> Self::Output {
         Self(!self.0)
     }
 }
 impl std::ops::BitAnd for Flags {
     type Output = Self;
+    #[inline(always)]
     fn bitand(self, rhs: Self) -> Self::Output {
         Self(self.0 & rhs.0)
     }
 }
 impl std::ops::BitAndAssign for Flags {
+    #[inline(always)]
     fn bitand_assign(&mut self, rhs: Self) {
         *self = *self & rhs
     }
 }
 impl std::ops::BitOr for Flags {
     type Output = Self;
+    #[inline(always)]
     fn bitor(self, rhs: Self) -> Self::Output {
         Self(self.0 | rhs.0)
     }
 }
 impl std::ops::BitOrAssign for Flags {
+    #[inline(always)]
     fn bitor_assign(&mut self, rhs: Self) {
         *self = *self | rhs
     }
@@ -58,10 +65,12 @@ impl<T> Stack<T> {
         Self(Vec::new())
     }
 
+    #[inline]
     pub(crate) fn pop(&mut self) -> Option<T> {
         self.0.pop()
     }
 
+    #[inline]
     pub(crate) fn push(&mut self, item: T) {
         self.0.push(item);
     }
@@ -129,6 +138,7 @@ impl SmallAny {
         }
     }
 
+    #[inline]
     pub(crate) fn downcast_ref<T: std::any::Any + 'static>(&self) -> Option<&T> {
         match self {
             Self::Inline(data, type_id) => {
@@ -165,6 +175,7 @@ impl<T> ThreadLocalUnsafeCellExt<T> for std::thread::LocalKey<std::cell::UnsafeC
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) struct NonMaxUsize(std::num::NonZeroUsize);
 impl NonMaxUsize {
+    #[inline]
     pub(crate) const fn new(value: usize) -> Option<Self> {
         match std::num::NonZeroUsize::new(value ^ std::usize::MAX) {
             Some(nz) => Some(Self(nz)),
@@ -172,6 +183,7 @@ impl NonMaxUsize {
         }
     }
     
+    #[inline(always)]
     pub(crate) const fn get(&self) -> usize {
         self.0.get() ^ std::usize::MAX
     }

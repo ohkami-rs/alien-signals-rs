@@ -13,19 +13,24 @@ thread_local! {
     static SYSTEM: std::cell::UnsafeCell<System> = std::cell::UnsafeCell::new(System::default());
 }
 
+#[inline(always)]
 pub fn set_active_sub(sub: Option<Node>) -> Option<Node> {
     SYSTEM.with_borrow_mut(|sys| std::mem::replace(&mut sys.active_sub, sub))
 }
+#[inline]
 pub fn get_active_sub() -> Option<Node> {
     SYSTEM.with_borrow(|sys| sys.active_sub)
 }
 
+#[inline]
 pub fn get_batch_depth() -> usize {
     SYSTEM.with_borrow(|sys| sys.batch_depth)
 }
+#[inline]
 pub fn start_batch() {
     SYSTEM.with_borrow_mut(|sys| sys.batch_depth += 1);
 }
+#[inline]
 pub fn end_batch() {
     let is_zero = SYSTEM.with_borrow_mut(|sys| {
         sys.batch_depth -= 1;
@@ -36,13 +41,16 @@ pub fn end_batch() {
     }
 }
 
+#[inline]
 pub(crate) fn increment_cycle() {
     SYSTEM.with_borrow_mut(|sys| sys.cycle.increment());
 }
+#[inline]
 pub(crate) fn get_cycle() -> Version {
     SYSTEM.with_borrow(|sys| sys.cycle)
 }
 
+#[inline]
 pub(crate) fn with_queued<T>(f: impl Fn(&mut Queue<Node<EffectContext>>) -> T) -> T {
     SYSTEM.with_borrow_mut(|sys| f(&mut sys.queued))
 }
@@ -285,6 +293,7 @@ pub(crate) fn check_dirty(mut link: Link, mut sub: Node) -> bool {
     }
 }
 
+#[inline]
 pub(crate) fn shallow_propagate(mut link: Link) {
     loop {
         let sub = link.sub();
@@ -308,6 +317,7 @@ pub(crate) fn shallow_propagate(mut link: Link) {
     }
 }
 
+#[inline]
 pub(crate) fn is_valid_link(check_link: Link, sub: Node) -> bool {
     let mut link = sub.deps_tail();
     while let Some(some_link) = link {
