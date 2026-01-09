@@ -18,6 +18,20 @@ static SYSTEM: SyncUnsafeCell<System> = SyncUnsafeCell::new(System {
     queued: Queue::new(),
 });
 
+struct StackPool {
+    propagate_stack: Stack<Option<Link>>,
+    check_dirty_stack: Stack<Link>,
+}
+
+/// SAFETY: This crate is just intended for single-threaded use.
+unsafe impl Sync for StackPool {}
+unsafe impl Send for StackPool {}
+
+static STACK_POOL: std::sync::LazyLock<SyncUnsafeCell<StackPool>> = std::sync::LazyLock::new(|| SyncUnsafeCell::new(StackPool {
+    propagate_stack: Stack::with_capacity(1024),
+    check_dirty_stack: Stack::with_capacity(1024),
+}));
+
 #[inline(always)]
 pub fn set_active_sub(sub: Option<Node>) -> Option<Node> {
     SYSTEM.with_borrow_mut(|sys| std::mem::replace(&mut sys.active_sub, sub))
@@ -157,8 +171,10 @@ pub(crate) fn unlink(link: Link, sub: Node) -> Option<Link> {
 }
 
 pub(crate) fn propagate(mut link: Link) {
+    let stack = &mut (unsafe { &mut *STACK_POOL.get() }).propagate_stack;
+    let stack_start = stack.length();
+    
     let mut next = link.next_sub();
-    let mut stack = Stack::<Option<Link>>::new();
 
     'top: loop {
         let sub = link.sub();
@@ -203,7 +219,7 @@ pub(crate) fn propagate(mut link: Link) {
             continue;
         }
 
-        while let Some(popped_link_opt) = stack.pop() {
+        while stack.length() > stack_start && let Some(popped_link_opt) = stack.pop() {
             if let Some(popped_link) = popped_link_opt {
                 link = popped_link;
                 next = link.next_sub();
@@ -213,10 +229,14 @@ pub(crate) fn propagate(mut link: Link) {
 
         break;
     }
+    
+    stack.truncate(stack_start);
 }
 
 pub(crate) fn check_dirty(mut link: Link, mut sub: Node) -> bool {
-    let mut stack = Stack::<Link>::new();
+    let stack = &mut (unsafe { &mut *STACK_POOL.get() }).check_dirty_stack;
+    let stack_start = stack.length();
+    
     let mut check_depth = 0;
     let mut dirty = false;
 
@@ -294,6 +314,7 @@ pub(crate) fn check_dirty(mut link: Link, mut sub: Node) -> bool {
             continue;
         }
 
+        stack.truncate(stack_start);
         return dirty;
     }
 }

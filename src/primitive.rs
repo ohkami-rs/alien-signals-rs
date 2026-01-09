@@ -64,6 +64,9 @@ impl<T> Stack<T> {
     pub(crate) const fn new() -> Self {
         Self(Vec::new())
     }
+    pub(crate) fn with_capacity(capacity: usize) -> Self {
+        Self(Vec::with_capacity(capacity))
+    }
 
     #[inline]
     pub(crate) fn pop(&mut self) -> Option<T> {
@@ -73,6 +76,15 @@ impl<T> Stack<T> {
     #[inline]
     pub(crate) fn push(&mut self, item: T) {
         self.0.push(item);
+    }
+    
+    #[inline]
+    pub(crate) fn length(&self) -> usize {
+        self.0.len()
+    }
+    
+    pub(crate) fn truncate(&mut self, len: usize) {
+        self.0.truncate(len);
     }
 }
 
@@ -169,6 +181,10 @@ impl<T> SyncUnsafeCell<T> {
     pub(crate) fn with_borrow_mut<R>(&'static self, f: impl FnOnce(&mut T) -> R) -> R {
         let borrow_mut = unsafe { &mut *self.0.get() };
         f(borrow_mut)
+    }
+    
+    pub(crate) fn get(&self) -> *mut T {
+        self.0.get()
     }
 }
 
