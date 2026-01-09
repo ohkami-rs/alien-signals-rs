@@ -151,7 +151,6 @@ pub(crate) fn unlink(link: Link, sub: Node) -> Option<Link> {
     next_dep
 }
 
-#[inline(always)]
 pub(crate) fn propagate(mut link: Link) {
     let mut next = link.next_sub();
     let mut stack = Stack::<Option<Link>>::new();
