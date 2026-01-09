@@ -203,3 +203,60 @@ fn test_nonmax_usize() {
     }
     assert!(NonMaxUsize::new(std::usize::MAX).is_none());
 }
+
+pub(crate) struct ChunkedArena<T, const CHUNK_SIZE: usize> {
+    chunks: Vec<Box<[std::mem::MaybeUninit<T>; CHUNK_SIZE]>>,
+    current_chunk_index: usize,
+    next_slot_index: usize,
+}
+impl<T, const CHUNK_SIZE: usize> ChunkedArena<T, CHUNK_SIZE> {
+    pub(crate) fn new() -> Self {
+        assert!(CHUNK_SIZE > 0, "CHUNK_SIZE must be >= 1");
+        
+        let first_chunk = Box::new([const { std::mem::MaybeUninit::uninit() }; CHUNK_SIZE]);
+        Self {
+            chunks: vec![first_chunk],
+            current_chunk_index: 0,
+            next_slot_index: 0,
+        }
+    }
+
+    pub(crate) fn alloc(&mut self, value: T) -> std::ptr::NonNull<T> {
+        if self.next_slot_index >= CHUNK_SIZE {
+            self.chunks.push(Box::new([const { std::mem::MaybeUninit::uninit() }; CHUNK_SIZE]));
+            self.current_chunk_index += 1;
+            self.next_slot_index = 0;
+        }
+        let alloced_ptr = unsafe {
+            self
+                .chunks
+                .get_unchecked_mut(self.current_chunk_index)
+                .get_unchecked_mut(self.next_slot_index)
+                .write(value)
+        };
+        self.next_slot_index += 1;
+        unsafe { std::ptr::NonNull::new_unchecked(alloced_ptr) }
+    }
+}
+impl<T, const CHUNK_SIZE: usize> Default for ChunkedArena<T, CHUNK_SIZE> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+impl<T, const CHUNK_SIZE: usize> Drop for ChunkedArena<T, CHUNK_SIZE> {
+    fn drop(&mut self) {
+        for chunk in &mut self.chunks[..self.current_chunk_index] {
+            chunk.iter_mut().for_each(|slot| unsafe {
+                std::ptr::drop_in_place(slot.as_mut_ptr());
+            });
+        }
+        if self.next_slot_index > 0 {
+            self.chunks[self.current_chunk_index]
+                .iter_mut()
+                .take(self.next_slot_index)
+                .for_each(|slot| unsafe {
+                    std::ptr::drop_in_place(slot.as_mut_ptr());
+                });
+        }
+    }
+}
