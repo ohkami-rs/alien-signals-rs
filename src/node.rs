@@ -1,4 +1,4 @@
-use crate::primitive::{Flags, SmallAny, Version, NonMaxUsize, ChunkedArena, ThreadLocalUnsafeCellExt};
+use crate::primitive::{Flags, SmallAny, Version, ChunkedArena, ThreadLocalUnsafeCellExt};
 
 pub enum NodeContext {
     Signal(SignalContext),
@@ -25,36 +25,21 @@ impl NodeContext {
     }
 }
 
-#[derive(Clone)]
 pub struct SignalContext {
     pub(crate) current_value: SmallAny,
     pub(crate) pending_value: SmallAny,
-    pub(crate) eq: std::rc::Rc<dyn Fn(&SmallAny, &SmallAny) -> bool>,
+    pub(crate) eq: Box<dyn Fn(&SmallAny, &SmallAny) -> bool>,
 }
 
-#[derive(Clone)]
 pub struct ComputedContext {
     pub(crate) value: Option<SmallAny>,
-    pub(crate) get: std::rc::Rc<dyn Fn(Option<&SmallAny>) -> SmallAny>,
-    pub(crate) eq: std::rc::Rc<dyn Fn(&SmallAny, &SmallAny) -> bool>,
+    pub(crate) get: Box<dyn Fn(Option<&SmallAny>) -> SmallAny>,
+    pub(crate) eq: Box<dyn Fn(&SmallAny, &SmallAny) -> bool>,
 }
 
-#[derive(Clone)]
 pub struct EffectContext {
-    pub(crate) run: std::rc::Rc<dyn Fn()>,
+    pub(crate) run: Box<dyn Fn()>,
 }
-
-// /// SoA representation of a series of links
-// #[derive(Default)]
-// struct LinkArena {
-//     version: Vec<Version>,
-//     dep: Vec<Node>,
-//     sub: Vec<Node>,
-//     prev_sub: Vec<Option<Link>>,
-//     next_sub: Vec<Option<Link>>,
-//     prev_dep: Vec<Option<Link>>,
-//     next_dep: Vec<Option<Link>>,
-// }
 
 struct LinkFields {
     version: Version,
@@ -66,21 +51,6 @@ struct LinkFields {
     next_dep: Option<Link>,
 }
 const _: () = assert!(std::mem::size_of::<LinkFields>() == 7 * std::mem::size_of::<usize>());
-
-// /// SoA representation of a series of nodes
-// #[derive(Default)]
-// struct NodeArena {
-//     flags: Vec<Flags>,
-//     deps: Vec<Option<Link>>,
-//     deps_tail: Vec<Option<Link>>,
-//     subs: Vec<Option<Link>>,
-//     subs_tail: Vec<Option<Link>>,
-//     context_indices: Vec<(NodeContextKind, usize)>,
-//     /* */
-//     signals: Vec<SignalContext>,
-//     computeds: Vec<ComputedContext>,
-//     effects: Vec<EffectContext>,
-// }
 
 struct NodeFields {
     flags: Flags,
@@ -294,7 +264,7 @@ impl Node<SignalContext> {
             let context = NodeContext::Signal(SignalContext {
                 current_value: init.clone(),
                 pending_value: init,
-                eq: std::rc::Rc::new(move |a, b| {
+                eq: Box::new(move |a, b| {
                     let a = a.downcast_ref::<T>().unwrap_or_else(|| {
                         panic!("BUG: signal type is not {}", std::any::type_name::<T>())
                     });
@@ -316,9 +286,9 @@ impl Node<SignalContext> {
         })
     }
 
-    pub(crate) fn context(&self) -> SignalContext {
+    pub(crate) fn context(&self) -> &SignalContext {
         match unsafe { &*self.0.as_ptr() }.context {
-            NodeContext::Signal(ref ctx) => ctx.clone(),
+            NodeContext::Signal(ref ctx) => ctx,
             _ => panic!("BUG: Node is not a Signal"),
         }
     }
@@ -340,7 +310,7 @@ impl Node<ComputedContext> {
         ARENA.with_borrow_mut(|arena| {
             let context = NodeContext::Computed(ComputedContext {
                 value: None,
-                get: std::rc::Rc::new(move |prev_any| {
+                get: Box::new(move |prev_any| {
                     let prev_t = prev_any.map(|any| {
                         any.downcast_ref::<T>().unwrap_or_else(|| {
                             panic!("BUG: computed type is not {}", std::any::type_name::<T>())
@@ -349,7 +319,7 @@ impl Node<ComputedContext> {
                     let new_t = getter(prev_t);
                     SmallAny::new(new_t)
                 }),
-                eq: std::rc::Rc::new(move |a, b| {
+                eq: Box::new(move |a, b| {
                     let a = a.downcast_ref::<T>().unwrap_or_else(|| {
                         panic!("BUG: computed type is not {}", std::any::type_name::<T>())
                     });
@@ -371,9 +341,9 @@ impl Node<ComputedContext> {
         })
     }
 
-    pub(crate) fn context(&self) -> ComputedContext {
+    pub(crate) fn context(&self) -> &ComputedContext {
         match unsafe { &*self.0.as_ptr() }.context {
-            NodeContext::Computed(ref ctx) => ctx.clone(),
+            NodeContext::Computed(ref ctx) => ctx,
             _ => panic!("BUG: Node is not a Computed"),
         }
     }
@@ -389,7 +359,7 @@ impl Node<EffectContext> {
     pub(crate) fn new(f: impl Fn() + 'static) -> Self {
         ARENA.with_borrow_mut(|arena| {
             let context = NodeContext::Effect(EffectContext {
-                run: std::rc::Rc::new(f),
+                run: Box::new(f),
             });
             let ptr = arena.node.alloc(NodeFields {
                 flags: Flags::WATCHING | Flags::RECURSED_CHECK,
@@ -403,9 +373,9 @@ impl Node<EffectContext> {
         })
     }
 
-    pub(crate) fn context(&self) -> EffectContext {
+    pub(crate) fn context(&self) -> &EffectContext {
         match unsafe { &*self.0.as_ptr() }.context {
-            NodeContext::Effect(ref ctx) => ctx.clone(),
+            NodeContext::Effect(ref ctx) => ctx,
             _ => panic!("BUG: Node is not an Effect"),
         }
     }
