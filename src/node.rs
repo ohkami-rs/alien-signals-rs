@@ -63,8 +63,8 @@ struct NodeFields {
 
 #[derive(Default)]
 struct Arena {
-    link: ChunkedArena<LinkFields, 4096>,
-    node: ChunkedArena<NodeFields, 4096>,
+    link: ChunkedArena<LinkFields, 1024>,
+    node: ChunkedArena<NodeFields, 1024>,
 }
 
 thread_local! {

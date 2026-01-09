@@ -179,6 +179,7 @@ pub fn trigger(f: impl FnOnce() + 'static) {
     }
 }
 
+#[inline(always)]
 fn update_computed(c: Node<ComputedContext>) -> bool {
     system::increment_cycle();
     c.set_deps_tail(None);

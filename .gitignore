@@ -2,3 +2,4 @@
 Cargo.lock
 /vs
 /flamegraph
+perf.data*
