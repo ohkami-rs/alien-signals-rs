@@ -8,6 +8,7 @@ use primitive::{SmallAny, Version};
 pub use primitive::Flags;
 pub use system::{end_batch, get_active_sub, get_batch_depth, set_active_sub, start_batch};
 
+#[inline]
 fn update(signal_or_computed: Node) -> bool {
     match signal_or_computed.kind() {
         NodeContextKind::Signal => update_signal(signal_or_computed.try_into().unwrap()),
@@ -67,10 +68,12 @@ impl<T: Clone + 'static> Signal<T> {
         Self(node, std::marker::PhantomData)
     }
 
+    #[inline]
     pub fn get(&self) -> T {
         get_signal_oper(self.0)
     }
 
+    #[inline]
     pub fn set(&self, value: T) {
         set_signal_oper(self.0, value);
     }
@@ -80,6 +83,7 @@ impl<T: Clone + 'static> Signal<T> {
         set_with_signal_oper(self.0, f);
     }
 
+    #[inline]
     pub fn update(&self, f: impl FnOnce(&mut T)) {
         update_signal_oper(self.0, f);
     }
@@ -109,6 +113,7 @@ impl<T: Clone + 'static> Computed<T> {
         Self(node, std::marker::PhantomData)
     }
 
+    #[inline]
     pub fn get(&self) -> T {
         computed_oper(self.0)
     }
@@ -179,7 +184,7 @@ pub fn trigger(f: impl FnOnce() + 'static) {
     }
 }
 
-#[inline(always)]
+#[inline]
 fn update_computed(c: Node<ComputedContext>) -> bool {
     system::increment_cycle();
     c.set_deps_tail(None);
@@ -206,6 +211,7 @@ fn update_computed(c: Node<ComputedContext>) -> bool {
     is_changed
 }
 
+#[inline]
 fn update_signal(s: Node<SignalContext>) -> bool {
     s.set_flags(Flags::MUTABLE);
     let SignalContext {
