@@ -58,8 +58,9 @@ struct NodeFields {
     deps_tail: Option<Link>,
     subs: Option<Link>,
     subs_tail: Option<Link>,
-    context: NodeContext,
+    context: Box<NodeContext>,
 }
+const _: () = assert!(std::mem::size_of::<NodeFields>() == 6 * std::mem::size_of::<usize>());
 
 struct Arena {
     link: ChunkedArena<LinkFields, 1024>,
@@ -243,7 +244,7 @@ impl Node<NodeContext> {
                 deps_tail: None,
                 subs: None,
                 subs_tail: None,
-                context: NodeContext::None,
+                context: Box::new(NodeContext::None),
             });
             Node(ptr, std::marker::PhantomData)
         })
@@ -283,21 +284,21 @@ impl Node<SignalContext> {
                 deps_tail: None,
                 subs: None,
                 subs_tail: None,
-                context,
+                context: Box::new(context),
             });
             Node(ptr, std::marker::PhantomData)
         })
     }
 
     pub(crate) fn context(&self) -> &SignalContext {
-        match unsafe { &*self.0.as_ptr() }.context {
-            NodeContext::Signal(ref ctx) => ctx,
+        match &*unsafe { &*self.0.as_ptr() }.context {
+            NodeContext::Signal(ctx) => ctx,
             _ => panic!("BUG: Node is not a Signal"),
         }
     }
     pub(crate) fn update_context(&self, f: impl FnOnce(&mut SignalContext)) {
-        match unsafe { &mut *self.0.as_ptr() }.context {
-            NodeContext::Signal(ref mut ctx) => f(ctx),
+        match &mut *unsafe { &mut *self.0.as_ptr() }.context {
+            NodeContext::Signal(ctx) => f(ctx),
             _ => panic!("BUG: Node is not a Signal"),
         }
     }
@@ -338,21 +339,21 @@ impl Node<ComputedContext> {
                 deps_tail: None,
                 subs: None,
                 subs_tail: None,
-                context,
+                context: Box::new(context),
             });
             Node(ptr, std::marker::PhantomData)
         })
     }
 
     pub(crate) fn context(&self) -> &ComputedContext {
-        match unsafe { &*self.0.as_ptr() }.context {
-            NodeContext::Computed(ref ctx) => ctx,
+        match &*unsafe { &*self.0.as_ptr() }.context {
+            NodeContext::Computed(ctx) => ctx,
             _ => panic!("BUG: Node is not a Computed"),
         }
     }
     pub(crate) fn update_context(&self, f: impl FnOnce(&mut ComputedContext)) {
-        match unsafe { &mut *self.0.as_ptr() }.context {
-            NodeContext::Computed(ref mut ctx) => f(ctx),
+        match &mut *unsafe { &mut *self.0.as_ptr() }.context {
+            NodeContext::Computed(ctx) => f(ctx),
             _ => panic!("BUG: Node is not a Computed"),
         }
     }
@@ -370,15 +371,15 @@ impl Node<EffectContext> {
                 deps_tail: None,
                 subs: None,
                 subs_tail: None,
-                context,
+                context: Box::new(context),
             });
             Node(ptr, std::marker::PhantomData)
         })
     }
 
     pub(crate) fn context(&self) -> &EffectContext {
-        match unsafe { &*self.0.as_ptr() }.context {
-            NodeContext::Effect(ref ctx) => ctx,
+        match &*unsafe { &*self.0.as_ptr() }.context {
+            NodeContext::Effect(ctx) => ctx,
             _ => panic!("BUG: Node is not an Effect"),
         }
     }
