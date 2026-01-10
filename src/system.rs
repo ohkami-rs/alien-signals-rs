@@ -148,7 +148,7 @@ pub(crate) fn unlink(link: Link, sub: Node) -> Option<Link> {
         prev_sub.set_next_sub(next_sub);
     } else {
         dep.set_subs(next_sub);
-        if  next_sub.is_none() {
+        if next_sub.is_none() {
             super::unwatched(dep);
         }
     }
