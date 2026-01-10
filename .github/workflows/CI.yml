@@ -17,8 +17,9 @@ jobs:
       - name: Setup Rust
         run: |
           rustup update
-          rustup toolchain install nightly
-          rustup component add rustfmt clippy
+          rustup component add rustfmt
+          rustup update nightly
+          rustup component add clippy --toolchain nightly
           rustup target add wasm32-unknown-unknown
       
       - name: Run Tasks
