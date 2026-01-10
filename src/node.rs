@@ -250,6 +250,7 @@ impl Node<NodeContext> {
         })
     }
 
+    #[inline]
     pub(crate) fn kind(&self) -> NodeContextKind {
         unsafe { &*self.0.as_ptr() }.context.kind()
     }
