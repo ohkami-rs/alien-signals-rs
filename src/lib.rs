@@ -1,3 +1,6 @@
+// for doctest inclusion
+#![cfg_attr(all(doc, not(docsrs)), doc = include_str!("../../README.md"))]
+
 mod node;
 mod primitive;
 mod system;
@@ -51,7 +54,7 @@ pub struct Signal<T>(Node<SignalContext>, std::marker::PhantomData<T>);
 // not requiring `T: Clone`
 impl<T> Clone for Signal<T> {
     fn clone(&self) -> Self {
-        Self(self.0, self.1)
+        *self
     }
 }
 impl<T> Copy for Signal<T> {}
@@ -93,7 +96,7 @@ pub struct Computed<T>(Node<ComputedContext>, std::marker::PhantomData<T>);
 // not requiring `T: Clone`
 impl<T> Clone for Computed<T> {
     fn clone(&self) -> Self {
-        Self(self.0, self.1)
+        *self
     }
 }
 impl<T> Copy for Computed<T> {}
@@ -148,14 +151,14 @@ pub struct EffectScope {
 impl EffectScope {
     pub fn new(f: impl FnOnce() + 'static) -> Self {
         let e = Node::<NodeContext>::new(Flags::NONE);
-        let prev_sub = system::set_active_sub(e.into());
+        let prev_sub = system::set_active_sub(Some(e));
         if let Some(prev_sub) = prev_sub {
-            system::link(e.into(), prev_sub, Version::new());
+            system::link(e, prev_sub, Version::new());
         }
         f();
         system::set_active_sub(prev_sub);
         Self {
-            dispose: Box::new(move || effect_scope_oper(e.into())),
+            dispose: Box::new(move || effect_scope_oper(e)),
         }
     }
 
@@ -200,7 +203,7 @@ fn update_computed(c: Node<ComputedContext>) -> bool {
 
     let is_changed = match old_value {
         None => true, // initial update
-        Some(old_value) => !eq(&old_value, &new_value),
+        Some(old_value) => !eq(old_value, &new_value),
     };
 
     c.update_context(|ctx| ctx.value = Some(new_value));
@@ -219,7 +222,7 @@ fn update_signal(s: Node<SignalContext>) -> bool {
         pending_value,
         eq,
     } = s.context();
-    let is_changed = !eq(&current_value, &pending_value);
+    let is_changed = !eq(current_value, pending_value);
     s.update_context(|c| c.current_value = c.pending_value.clone());
     is_changed
 }

@@ -1,4 +1,4 @@
-use crate::primitive::{Flags, SmallAny, Version, ChunkedArena, SyncUnsafeCell};
+use crate::primitive::{ChunkedArena, Flags, SmallAny, SyncUnsafeCell, Version};
 
 pub enum NodeContext {
     Signal(SignalContext),
@@ -87,7 +87,7 @@ const _: () = assert!(std::mem::size_of::<Option<Node>>() == std::mem::size_of::
 /// not requiring `C: Clone`
 impl<C> Clone for Node<C> {
     fn clone(&self) -> Self {
-        Node(self.0, std::marker::PhantomData)
+        *self
     }
 }
 impl<C> Copy for Node<C> {}
@@ -363,9 +363,7 @@ impl Node<ComputedContext> {
 impl Node<EffectContext> {
     pub(crate) fn new(f: impl Fn() + 'static) -> Self {
         ARENA.with_borrow_mut(|arena| {
-            let context = NodeContext::Effect(EffectContext {
-                run: Box::new(f),
-            });
+            let context = NodeContext::Effect(EffectContext { run: Box::new(f) });
             let ptr = arena.node.alloc(NodeFields {
                 flags: Flags::WATCHING | Flags::RECURSED_CHECK,
                 deps: None,

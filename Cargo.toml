@@ -2,14 +2,23 @@
 name          = "alien-signals"
 version       = "0.1.0"
 edition       = "2024"
-authors       = ["kanarus <kanarus786@gmail.com>"]
+authors       = ["kanarus <mail@kanarus.dev>"]
 documentation = "https://docs.rs/alien-signals"
 homepage      = "https://crates.io/crates/alien-signals"
 repository    = "https://github.com/ohkami-rs/alien-signals"
 readme        = "README.md"
 license       = "MIT"
-description   = ""
-keywords      = []
-categories    = []
+description   = "👾 Rust port of alien-signals - the lightest signal library"
+keywords      = ["reactive", "signals", "alien-signals"]
+categories    = ["data-structures", "web-programming"]
 
-[dependencies]
+[lints.clippy]
+type_complexity = "allow"
+collapsible_if  = "allow" # for clear correspondence to alien-signals original code
+
+[package.metadata.tasks]
+CI            = "cargo metask test format_check clippy clippy_wasm32"
+test          = "cargo test"
+format_check  = "cargo fmt --check"
+clippy        = "cargo +nightly clippy --all-targets -- --deny warnings"
+clippy_wasm32 = "cargo +nightly clippy --all-targets --target wasm32-unknown-unknown -- --deny warnings"

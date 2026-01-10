@@ -1,5 +1,5 @@
 use crate::node::{EffectContext, Link, LinkInit, Node};
-use crate::primitive::{Flags, Queue, Stack, Version, SyncUnsafeCell};
+use crate::primitive::{Flags, Queue, Stack, SyncUnsafeCell, Version};
 
 struct System {
     cycle: Version,
@@ -146,11 +146,11 @@ pub(crate) fn unlink(link: Link, sub: Node) -> Option<Link> {
 
     if let Some(prev_sub) = prev_sub {
         prev_sub.set_next_sub(next_sub);
-    } else if {
+    } else {
         dep.set_subs(next_sub);
-        next_sub.is_none()
-    } {
-        super::unwatched(dep);
+        if  next_sub.is_none() {
+            super::unwatched(dep);
+        }
     }
 
     next_dep

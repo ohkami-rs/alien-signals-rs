@@ -207,10 +207,10 @@ fn should_custom_effect_support_batch() {
     });
 
     batch_effect(move || {
-        let _ = bb.get();
+        bb.get();
     });
     batch_effect(move || {
-        let _ = aa.get();
+        aa.get();
     });
 
     assert_eq!(

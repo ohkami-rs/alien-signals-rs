@@ -8,6 +8,7 @@ fn should_not_trigger_after_stop() {
 
     let mut _effect1 = None;
 
+    #[allow(unused_assignments)]
     let effect_scope = EffectScope::new({
         let triggers = triggers.clone();
         move || {

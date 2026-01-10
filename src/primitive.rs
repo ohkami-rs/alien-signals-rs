@@ -159,7 +159,7 @@ impl<T> SyncUnsafeCell<T> {
     pub(crate) const fn new(value: T) -> Self {
         Self(std::cell::UnsafeCell::new(value))
     }
-    
+
     #[inline(always)]
     pub(crate) fn with_borrow<R>(&'static self, f: impl FnOnce(&T) -> R) -> R {
         let borrow = unsafe { &*self.0.get() };
@@ -181,15 +181,21 @@ impl<T, const CHUNK_SIZE: usize> ChunkedArena<T, CHUNK_SIZE> {
     #[cold]
     fn make_first_chunk(&mut self) {
         if self.chunks.is_empty() {
-            self.chunks.push(Box::new([const { std::mem::MaybeUninit::uninit() }; CHUNK_SIZE]));
+            self.chunks.push(Box::new(
+                [const { std::mem::MaybeUninit::uninit() }; CHUNK_SIZE],
+            ));
         }
     }
-    
+
     /// Const variant of [`Self::new`].
     /// This doesn't allocate the first chunk to be const fn.
     pub(crate) const fn new_const() -> Self {
         assert!(CHUNK_SIZE > 0, "CHUNK_SIZE must be >= 1");
-        Self { chunks: Vec::new(), current_chunk_index: 0, next_slot_index: 0 }
+        Self {
+            chunks: Vec::new(),
+            current_chunk_index: 0,
+            next_slot_index: 0,
+        }
     }
 
     pub(crate) fn new() -> Self {
@@ -197,21 +203,22 @@ impl<T, const CHUNK_SIZE: usize> ChunkedArena<T, CHUNK_SIZE> {
         this.make_first_chunk();
         this
     }
-    
+
     pub(crate) fn alloc(&mut self, value: T) -> std::ptr::NonNull<T> {
         // for the case of `new_const`
         if self.chunks.is_empty() {
             self.make_first_chunk();
         }
-        
+
         if self.next_slot_index >= CHUNK_SIZE {
-            self.chunks.push(Box::new([const { std::mem::MaybeUninit::uninit() }; CHUNK_SIZE]));
+            self.chunks.push(Box::new(
+                [const { std::mem::MaybeUninit::uninit() }; CHUNK_SIZE],
+            ));
             self.current_chunk_index += 1;
             self.next_slot_index = 0;
         }
         let alloced_ptr = unsafe {
-            self
-                .chunks
+            self.chunks
                 .get_unchecked_mut(self.current_chunk_index)
                 .get_unchecked_mut(self.next_slot_index)
                 .write(value)

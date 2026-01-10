@@ -1,0 +1,26 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: ['main', 'v*']
+
+permissions: {}
+
+jobs:
+  CI:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      
+      - name: Setup Rust
+        run: |
+          rustup update
+          rustup toolchain install nightly
+          rustup component add rustfmt clippy
+          rustup target add wasm32-unknown-unknown
+      
+      - name: Run Tasks
+        run: |
+          cargo install cargo-metask && cargo metask CI
