@@ -1,5 +1,5 @@
 // for doctest inclusion
-#![cfg_attr(all(doc, not(docsrs)), doc = include_str!("../../README.md"))]
+#![cfg_attr(all(doc, not(docsrs)), doc = include_str!("../README.md"))]
 
 mod node;
 mod primitive;
