@@ -1,11 +1,18 @@
 <div align="center">
     <h1>
-        👾 Rust port of alien-signals
+        👾 alien-signals
     </h1>
+    <p>
+        Rust port of <a href="https://github.com/stackblitz/alien-signals">alien-signals</a>,
+        the lightest signal library.
+    </p>
 </div>
 
-Rust port of [alien-signals](https://github.com/stackblitz/alien-signals),
-the lightest signal library.
+<div align="right">
+    <a href="https://github.com/ohkami-rs/alien-signals/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/crates/l/alien-signals.svg" /></a>
+    <a href="https://github.com/ohkami-rs/alien-signals/actions"><img alt="CI status" src="https://github.com/ohkami-rs/alien-signals/actions/workflows/CI.yml/badge.svg"/></a>
+    <a href="https://crates.io/crates/alien-signals"><img alt="crates.io" src="https://img.shields.io/crates/v/alien-signals" /></a>
+</div>
 
 **NOTE**: This is not thread-safe.
 
