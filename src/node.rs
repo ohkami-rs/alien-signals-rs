@@ -312,12 +312,9 @@ impl Node<SignalContext> {
                 current_value: init.clone(),
                 pending_value: init,
                 eq: Box::new(move |a, b| {
-                    let a = a.downcast_ref::<T>().unwrap_or_else(|| {
-                        panic!("BUG: signal type is not {}", std::any::type_name::<T>())
-                    });
-                    let b = b.downcast_ref::<T>().unwrap_or_else(|| {
-                        panic!("BUG: signal type is not {}", std::any::type_name::<T>())
-                    });
+                    // SAFETY: the type is guaranteed to be T by the constructor
+                    let a = unsafe { a.downcast_ref_unchecked::<T>() };
+                    let b = unsafe { b.downcast_ref_unchecked::<T>() };
                     eq_fn(a, b)
                 }),
             });
@@ -363,21 +360,15 @@ impl Node<ComputedContext> {
             let context = NodeContext::Computed(ComputedContext {
                 value: None,
                 get: Box::new(move |prev_any| {
-                    let prev_t = prev_any.map(|any| {
-                        any.downcast_ref::<T>().unwrap_or_else(|| {
-                            panic!("BUG: computed type is not {}", std::any::type_name::<T>())
-                        })
-                    });
+                    // SAFETY: the type is guaranteed to be T by the constructor
+                    let prev_t = prev_any.map(|any| unsafe { any.downcast_ref_unchecked::<T>() });
                     let new_t = getter(prev_t);
                     SmallAny::new(new_t)
                 }),
                 eq: Box::new(move |a, b| {
-                    let a = a.downcast_ref::<T>().unwrap_or_else(|| {
-                        panic!("BUG: computed type is not {}", std::any::type_name::<T>())
-                    });
-                    let b = b.downcast_ref::<T>().unwrap_or_else(|| {
-                        panic!("BUG: computed type is not {}", std::any::type_name::<T>())
-                    });
+                    // SAFETY: the type is guaranteed to be T by the constructor
+                    let a = unsafe { a.downcast_ref_unchecked::<T>() };
+                    let b = unsafe { b.downcast_ref_unchecked::<T>() };
                     eq_fn(a, b)
                 }),
             });

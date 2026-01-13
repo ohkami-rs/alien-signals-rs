@@ -299,16 +299,16 @@ fn computed_oper<T: Clone + 'static>(this: Node<ComputedContext>) -> T {
         system::link(this.into(), sub, system::get_cycle());
     }
 
-    // SAFETY: the closure does not internally call `.with_context_mut` on `this`
+    // SAFETY:
+    //
+    // - `with_context`: the closure does not internally call `.with_context_mut` on `this`.
+    // - `downcast_ref_unchecked`: the type is guaranteed to be `T` by the constructor.
     unsafe {
         this.with_context(|ComputedContext { value, .. }| {
             value
                 .as_ref()
                 .expect("BUG: computed value is None")
-                .downcast_ref::<T>()
-                .unwrap_or_else(|| {
-                    panic!("BUG: computed type is not {}", std::any::type_name::<T>())
-                })
+                .downcast_ref_unchecked::<T>()
                 .clone()
         })
     }
@@ -344,15 +344,13 @@ fn set_signal_oper<T: 'static>(this: Node<SignalContext>, value: T) {
 }
 
 fn set_with_signal_oper<T: 'static>(this: Node<SignalContext>, set_with: impl FnOnce(&T) -> T) {
-    // SAFETY: the closure does not internally call `.with_context_mut` on `this`
+    // SAFETY:
+    //
+    // - `with_context`: the closure does not internally call `.with_context_mut` on `this`.
+    // - `downcast_ref_unchecked`: the type is guaranteed to be `T` by the constructor.
     let value = unsafe {
         this.with_context(|SignalContext { current_value, .. }| {
-            let current_value = current_value.downcast_ref::<T>().unwrap_or_else(|| {
-                panic!(
-                    "BUG: signal node is not of type {}",
-                    std::any::type_name::<T>()
-                )
-            });
+            let current_value = current_value.downcast_ref_unchecked::<T>();
             set_with(current_value)
         })
     };
@@ -360,18 +358,13 @@ fn set_with_signal_oper<T: 'static>(this: Node<SignalContext>, set_with: impl Fn
 }
 
 fn update_signal_oper<T: Clone + 'static>(this: Node<SignalContext>, update: impl FnOnce(&mut T)) {
-    // SAFETY: the closure does not internally call `.with_context_mut` on `this`
+    // SAFETY:
+    //
+    // - `with_context`: the closure does not internally call `.with_context_mut` on `this`.
+    // - `downcast_ref_unchecked`: the type is guaranteed to be `T` by the constructor.
     let value = unsafe {
         this.with_context(|SignalContext { current_value, .. }| {
-            let mut value = current_value
-                .downcast_ref::<T>()
-                .unwrap_or_else(|| {
-                    panic!(
-                        "BUG: signal node is not of type {}",
-                        std::any::type_name::<T>()
-                    )
-                })
-                .clone();
+            let mut value = current_value.downcast_ref_unchecked::<T>().clone();
             update(&mut value);
             value
         })
@@ -397,18 +390,13 @@ fn get_signal_oper<T: Clone + 'static>(this: Node<SignalContext>) -> T {
         sub = some_sub.subs().map(|it| it.sub());
     }
 
-    // SAFETY: the closure does not internally call `.with_context_mut` on `this`
+    // SAFETY:
+    //
+    // - `with_context`: the closure does not internally call `.with_context_mut` on `this`
+    // - `downcast_ref_unchecked`: the type is guaranteed to be `T` by the constructor.
     unsafe {
         this.with_context(|SignalContext { current_value, .. }| {
-            current_value
-                .downcast_ref::<T>()
-                .unwrap_or_else(|| {
-                    panic!(
-                        "BUG: signal node is not of type {}",
-                        std::any::type_name::<T>()
-                    )
-                })
-                .clone()
+            current_value.downcast_ref_unchecked::<T>().clone()
         })
     }
 }

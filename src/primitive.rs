@@ -119,7 +119,7 @@ impl Version {
 
 #[derive(Clone)]
 pub(crate) enum SmallAny {
-    Inline([u8; 16], std::any::TypeId),
+    Inline([u8; 16]),
     Heap(std::rc::Rc<dyn std::any::Any>),
 }
 impl SmallAny {
@@ -132,23 +132,18 @@ impl SmallAny {
                 std::ptr::copy_nonoverlapping(ptr, data.as_mut_ptr(), size_of::<T>());
             }
             std::mem::forget(value);
-            Self::Inline(data, std::any::TypeId::of::<T>())
+            Self::Inline(data)
         } else {
             Self::Heap(std::rc::Rc::new(value))
         }
     }
 
+    /// SAFETY: Caller must ensure that the stored type is `T`.
     #[inline]
-    pub(crate) fn downcast_ref<T: std::any::Any + 'static>(&self) -> Option<&T> {
+    pub(crate) unsafe fn downcast_ref_unchecked<T: std::any::Any + 'static>(&self) -> &T {
         match self {
-            Self::Inline(data, type_id) => {
-                if *type_id == std::any::TypeId::of::<T>() {
-                    Some(unsafe { &*(data.as_ptr() as *const T) })
-                } else {
-                    None
-                }
-            }
-            Self::Heap(rc_any) => rc_any.downcast_ref::<T>(),
+            Self::Inline(data) => unsafe { &*(data.as_ptr() as *const T) },
+            Self::Heap(rc_any) => unsafe { rc_any.downcast_ref::<T>().unwrap_unchecked() },
         }
     }
 }
