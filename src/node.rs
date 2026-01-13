@@ -361,9 +361,7 @@ impl Node<ComputedContext> {
                 value: None,
                 get: Box::new(move |prev_any| {
                     // SAFETY: the type is guaranteed to be T by the constructor
-                    let prev_t = prev_any.map(|any| unsafe {
-                        any.downcast_ref_unchecked::<T>()
-                    });
+                    let prev_t = prev_any.map(|any| unsafe { any.downcast_ref_unchecked::<T>() });
                     let new_t = getter(prev_t);
                     SmallAny::new(new_t)
                 }),

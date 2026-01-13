@@ -300,7 +300,7 @@ fn computed_oper<T: Clone + 'static>(this: Node<ComputedContext>) -> T {
     }
 
     // SAFETY:
-    // 
+    //
     // - `with_context`: the closure does not internally call `.with_context_mut` on `this`.
     // - `downcast_ref_unchecked`: the type is guaranteed to be `T` by the constructor.
     unsafe {
@@ -345,7 +345,7 @@ fn set_signal_oper<T: 'static>(this: Node<SignalContext>, value: T) {
 
 fn set_with_signal_oper<T: 'static>(this: Node<SignalContext>, set_with: impl FnOnce(&T) -> T) {
     // SAFETY:
-    // 
+    //
     // - `with_context`: the closure does not internally call `.with_context_mut` on `this`.
     // - `downcast_ref_unchecked`: the type is guaranteed to be `T` by the constructor.
     let value = unsafe {
@@ -359,14 +359,12 @@ fn set_with_signal_oper<T: 'static>(this: Node<SignalContext>, set_with: impl Fn
 
 fn update_signal_oper<T: Clone + 'static>(this: Node<SignalContext>, update: impl FnOnce(&mut T)) {
     // SAFETY:
-    // 
+    //
     // - `with_context`: the closure does not internally call `.with_context_mut` on `this`.
     // - `downcast_ref_unchecked`: the type is guaranteed to be `T` by the constructor.
     let value = unsafe {
         this.with_context(|SignalContext { current_value, .. }| {
-            let mut value = current_value
-                .downcast_ref_unchecked::<T>()
-                .clone();
+            let mut value = current_value.downcast_ref_unchecked::<T>().clone();
             update(&mut value);
             value
         })
@@ -393,14 +391,12 @@ fn get_signal_oper<T: Clone + 'static>(this: Node<SignalContext>) -> T {
     }
 
     // SAFETY:
-    // 
+    //
     // - `with_context`: the closure does not internally call `.with_context_mut` on `this`
     // - `downcast_ref_unchecked`: the type is guaranteed to be `T` by the constructor.
     unsafe {
         this.with_context(|SignalContext { current_value, .. }| {
-            current_value
-                .downcast_ref_unchecked::<T>()
-                .clone()
+            current_value.downcast_ref_unchecked::<T>().clone()
         })
     }
 }
