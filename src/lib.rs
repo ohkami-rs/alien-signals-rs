@@ -26,7 +26,7 @@ fn notify(mut effect: Node<EffectContext>) {
     // just push directly to `ququed` and finally reverse newly-pushed part
     let chain_head_index = system::with_queued(|q| q.length());
     loop {
-        effect.update_flags(|f| *f &= !Flags::WATCHING);
+        effect.remove_flags(Flags::WATCHING);
         system::with_queued(|q| q.push(effect));
         match effect.subs().map(|s| s.sub()) {
             Some(subs_sub) if (subs_sub.flags() & Flags::WATCHING).is_nonzero() => {
@@ -132,9 +132,9 @@ impl Effect {
         if let Some(prev_sub) = prev_sub {
             system::link(e.into(), prev_sub, Version::new());
         }
-        (e.context().run)();
+        e.with_context(|EffectContext { run }| run());
         system::set_active_sub(prev_sub);
-        e.update_flags(|f| *f &= !Flags::RECURSED_CHECK);
+        e.remove_flags(Flags::RECURSED_CHECK);
         Self {
             dispose: Box::new(move || effect_oper(e)),
         }
@@ -193,22 +193,22 @@ fn update_computed(c: Node<ComputedContext>) -> bool {
     c.set_deps_tail(None);
     c.set_flags(Flags::MUTABLE | Flags::RECURSED_CHECK);
     let prev_sub = system::set_active_sub(Some(c.into()));
-    let ComputedContext {
-        value: old_value,
-        get,
-        eq,
-    } = c.context();
 
-    let new_value = get(old_value.as_ref());
-
-    let is_changed = match old_value {
-        None => true, // initial update
-        Some(old_value) => !eq(old_value, &new_value),
+    // SAFETY: the closure does not internally call `.with_context` or `.with_context_mut` on `c`
+    let is_changed = unsafe {
+        c.with_context_mut(|ComputedContext { value, get, eq }| {
+            let new_value = get(value.as_ref());
+            let is_changed = match value {
+                None => true, // initial update
+                Some(old_value) => !eq(old_value, &new_value),
+            };
+            *value = Some(new_value);
+            is_changed
+        })
     };
 
-    c.update_context(|ctx| ctx.value = Some(new_value));
     system::set_active_sub(prev_sub);
-    c.update_flags(|f| *f &= !Flags::RECURSED_CHECK);
+    c.remove_flags(Flags::RECURSED_CHECK);
     purge_deps(c.into());
 
     is_changed
@@ -217,14 +217,20 @@ fn update_computed(c: Node<ComputedContext>) -> bool {
 #[inline]
 fn update_signal(s: Node<SignalContext>) -> bool {
     s.set_flags(Flags::MUTABLE);
-    let SignalContext {
-        current_value,
-        pending_value,
-        eq,
-    } = s.context();
-    let is_changed = !eq(current_value, pending_value);
-    s.update_context(|c| c.current_value = c.pending_value.clone());
-    is_changed
+    // SAFETY: the closure does not internally call `.with_context` or `.with_context_mut` on `s`
+    unsafe {
+        s.with_context_mut(
+            |SignalContext {
+                 current_value,
+                 pending_value,
+                 eq,
+             }| {
+                let is_changed = !eq(current_value, pending_value);
+                *current_value = pending_value.clone();
+                is_changed
+            },
+        )
+    }
 }
 
 fn run(e: Node<EffectContext>) {
@@ -240,12 +246,9 @@ fn run(e: Node<EffectContext>) {
         e.set_deps_tail(None);
         e.set_flags(Flags::WATCHING | Flags::RECURSED_CHECK);
         let prev_sub = system::set_active_sub(Some(e.into()));
-        let EffectContext { run } = e.context();
-
-        run();
-
+        e.with_context(|EffectContext { run }| run());
         system::set_active_sub(prev_sub);
-        e.update_flags(|f| *f &= !Flags::RECURSED_CHECK);
+        e.remove_flags(Flags::RECURSED_CHECK);
         purge_deps(e.into());
     } else {
         e.set_flags(Flags::WATCHING);
@@ -281,32 +284,50 @@ fn computed_oper<T: Clone + 'static>(this: Node<ComputedContext>) -> T {
     } else if flags.is_zero() {
         this.set_flags(Flags::MUTABLE | Flags::RECURSED_CHECK);
         let prev_sub = system::set_active_sub(Some(this.into()));
-        let ComputedContext { value, get, eq: _ } = this.context();
-
-        let new_value = get(value.as_ref());
-
-        this.update_context(|ctx| ctx.value = Some(new_value));
+        // SAFETY: the closure does not internally call `.with_context` or `.with_context_mut` on `this`
+        unsafe {
+            this.with_context_mut(|ComputedContext { value, get, .. }| {
+                let new_value = get(value.as_ref());
+                *value = Some(new_value);
+            });
+        }
         system::set_active_sub(prev_sub);
-        this.update_flags(|f| *f &= !Flags::RECURSED_CHECK);
+        this.remove_flags(Flags::RECURSED_CHECK);
     }
 
     if let Some(sub) = system::get_active_sub() {
         system::link(this.into(), sub, system::get_cycle());
     }
 
-    this.context()
-        .value
-        .as_ref()
-        .expect("BUG: computed value is None")
-        .downcast_ref::<T>()
-        .unwrap_or_else(|| panic!("BUG: computed type is not {}", std::any::type_name::<T>()))
-        .clone()
+    // SAFETY: the closure does not internally call `.with_context_mut` on `this`
+    unsafe {
+        this.with_context(|ComputedContext { value, .. }| {
+            value
+                .as_ref()
+                .expect("BUG: computed value is None")
+                .downcast_ref::<T>()
+                .unwrap_or_else(|| {
+                    panic!("BUG: computed type is not {}", std::any::type_name::<T>())
+                })
+                .clone()
+        })
+    }
 }
 
-fn _set_signal_oper_core<T: 'static>(context: &SignalContext, this: Node<SignalContext>, value: T) {
+fn _set_signal_oper_core<T: 'static>(this: Node<SignalContext>, value: T) {
     let value = SmallAny::new(value);
-    let is_changed = !(context.eq)(&context.pending_value, &value);
-    this.update_context(|c| c.pending_value = value);
+    // SAFETY: the closure does not internally call `.with_context` or `.with_context_mut` on `this`
+    let is_changed = unsafe {
+        this.with_context_mut(
+            |SignalContext {
+                 pending_value, eq, ..
+             }| {
+                let is_changed = !eq(pending_value, &value);
+                *pending_value = value;
+                is_changed
+            },
+        )
+    };
     if is_changed {
         this.set_flags(Flags::MUTABLE | Flags::DIRTY);
         if let Some(subs) = this.subs() {
@@ -319,38 +340,43 @@ fn _set_signal_oper_core<T: 'static>(context: &SignalContext, this: Node<SignalC
 }
 
 fn set_signal_oper<T: 'static>(this: Node<SignalContext>, value: T) {
-    _set_signal_oper_core(this.context(), this, value);
+    _set_signal_oper_core(this, value);
 }
 
 fn set_with_signal_oper<T: 'static>(this: Node<SignalContext>, set_with: impl FnOnce(&T) -> T) {
-    let context = this.context();
-    let current_value = context
-        .current_value
-        .downcast_ref::<T>()
-        .unwrap_or_else(|| {
-            panic!(
-                "BUG: signal node is not of type {}",
-                std::any::type_name::<T>()
-            )
-        });
-    let value = set_with(current_value);
-    _set_signal_oper_core(context, this, value);
+    // SAFETY: the closure does not internally call `.with_context_mut` on `this`
+    let value = unsafe {
+        this.with_context(|SignalContext { current_value, .. }| {
+            let current_value = current_value.downcast_ref::<T>().unwrap_or_else(|| {
+                panic!(
+                    "BUG: signal node is not of type {}",
+                    std::any::type_name::<T>()
+                )
+            });
+            set_with(current_value)
+        })
+    };
+    _set_signal_oper_core(this, value);
 }
 
 fn update_signal_oper<T: Clone + 'static>(this: Node<SignalContext>, update: impl FnOnce(&mut T)) {
-    let context = this.context();
-    let mut current_value = context
-        .current_value
-        .downcast_ref::<T>()
-        .unwrap_or_else(|| {
-            panic!(
-                "BUG: signal node is not of type {}",
-                std::any::type_name::<T>()
-            )
+    // SAFETY: the closure does not internally call `.with_context_mut` on `this`
+    let value = unsafe {
+        this.with_context(|SignalContext { current_value, .. }| {
+            let mut value = current_value
+                .downcast_ref::<T>()
+                .unwrap_or_else(|| {
+                    panic!(
+                        "BUG: signal node is not of type {}",
+                        std::any::type_name::<T>()
+                    )
+                })
+                .clone();
+            update(&mut value);
+            value
         })
-        .clone();
-    update(&mut current_value);
-    _set_signal_oper_core(context, this, current_value);
+    };
+    _set_signal_oper_core(this, value);
 }
 
 fn get_signal_oper<T: Clone + 'static>(this: Node<SignalContext>) -> T {
@@ -371,16 +397,20 @@ fn get_signal_oper<T: Clone + 'static>(this: Node<SignalContext>) -> T {
         sub = some_sub.subs().map(|it| it.sub());
     }
 
-    this.context()
-        .current_value
-        .downcast_ref::<T>()
-        .unwrap_or_else(|| {
-            panic!(
-                "BUG: signal node is not of type {}",
-                std::any::type_name::<T>()
-            )
+    // SAFETY: the closure does not internally call `.with_context_mut` on `this`
+    unsafe {
+        this.with_context(|SignalContext { current_value, .. }| {
+            current_value
+                .downcast_ref::<T>()
+                .unwrap_or_else(|| {
+                    panic!(
+                        "BUG: signal node is not of type {}",
+                        std::any::type_name::<T>()
+                    )
+                })
+                .clone()
         })
-        .clone()
+    }
 }
 
 fn effect_oper(this: Node<EffectContext>) {

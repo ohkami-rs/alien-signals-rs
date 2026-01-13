@@ -75,11 +75,17 @@ static ARENA: SyncUnsafeCell<Arena> = SyncUnsafeCell::new(Arena {
     node: ChunkedArena::new_const(),
 });
 
+/// ## Safety
+///
+/// Single-threaded use only
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Link(std::ptr::NonNull<LinkFields>);
 const _: () = assert!(std::mem::size_of::<Link>() == std::mem::size_of::<usize>());
 const _: () = assert!(std::mem::size_of::<Option<Link>>() == std::mem::size_of::<usize>());
 
+/// ## Safety
+///
+/// Single-threaded use only
 pub struct Node<C = NodeContext>(std::ptr::NonNull<NodeFields>, std::marker::PhantomData<C>);
 const _: () = assert!(std::mem::size_of::<Node>() == std::mem::size_of::<usize>());
 const _: () = assert!(std::mem::size_of::<Option<Node>>() == std::mem::size_of::<usize>());
@@ -126,112 +132,148 @@ impl Link {
     }
 
     pub(crate) fn version(&self) -> Version {
-        unsafe { &*self.0.as_ptr() }.version
+        unsafe { (*self.0.as_ptr()).version }
     }
     pub(crate) fn set_version(&self, version: Version) {
-        unsafe { &mut *self.0.as_ptr() }.version = version;
+        unsafe {
+            (*self.0.as_ptr()).version = version;
+        }
     }
 
     #[inline]
     pub(crate) fn dep(&self) -> Node {
-        unsafe { &*self.0.as_ptr() }.dep
+        unsafe { (*self.0.as_ptr()).dep }
     }
 
     #[inline]
     pub(crate) fn sub(&self) -> Node {
-        unsafe { &*self.0.as_ptr() }.sub
+        unsafe { (*self.0.as_ptr()).sub }
     }
 
     #[inline]
     pub(crate) fn prev_sub(&self) -> Option<Link> {
-        unsafe { &*self.0.as_ptr() }.prev_sub
+        unsafe { (*self.0.as_ptr()).prev_sub }
     }
     #[inline]
     pub(crate) fn set_prev_sub(&self, link: Option<Link>) {
-        unsafe { &mut *self.0.as_ptr() }.prev_sub = link;
+        unsafe {
+            (*self.0.as_ptr()).prev_sub = link;
+        }
     }
 
     #[inline]
     pub(crate) fn next_sub(&self) -> Option<Link> {
-        unsafe { &*self.0.as_ptr() }.next_sub
+        unsafe { (*self.0.as_ptr()).next_sub }
     }
     #[inline]
     pub(crate) fn set_next_sub(&self, link: Option<Link>) {
-        unsafe { &mut *self.0.as_ptr() }.next_sub = link;
+        unsafe {
+            (*self.0.as_ptr()).next_sub = link;
+        }
     }
 
     #[inline]
     pub(crate) fn prev_dep(&self) -> Option<Link> {
-        unsafe { &*self.0.as_ptr() }.prev_dep
+        unsafe { (*self.0.as_ptr()).prev_dep }
     }
     #[inline]
     pub(crate) fn set_prev_dep(&self, link: Option<Link>) {
-        unsafe { &mut *self.0.as_ptr() }.prev_dep = link;
+        unsafe {
+            (*self.0.as_ptr()).prev_dep = link;
+        }
     }
 
     #[inline]
     pub(crate) fn next_dep(&self) -> Option<Link> {
-        unsafe { &*self.0.as_ptr() }.next_dep
+        unsafe { (*self.0.as_ptr()).next_dep }
     }
     #[inline]
     pub(crate) fn set_next_dep(&self, link: Option<Link>) {
-        unsafe { &mut *self.0.as_ptr() }.next_dep = link;
+        unsafe {
+            (*self.0.as_ptr()).next_dep = link;
+        }
     }
 }
 
 impl<C> Node<C> {
     #[inline(always)]
     pub fn flags(&self) -> Flags {
-        unsafe { &*self.0.as_ptr() }.flags
+        unsafe { (*self.0.as_ptr()).flags }
     }
     #[inline(always)]
     pub fn set_flags(&self, flags: Flags) {
-        unsafe { &mut *self.0.as_ptr() }.flags = flags;
+        unsafe {
+            (*self.0.as_ptr()).flags = flags;
+        }
     }
-    /// ```rust,no_run
-    /// alien_signals::get_active_sub().unwrap().update_flags(
-    ///     |f| *f &= !alien_signals::Flags::RECURSED_CHECK
-    /// );
-    /// ```
+    #[deprecated(since = "0.1.2", note = "use `add_flags` or `remove_flags` instead")]
     #[inline(always)]
     pub fn update_flags(&self, f: impl FnOnce(&mut Flags)) {
-        f(&mut unsafe { &mut *self.0.as_ptr() }.flags);
+        f(unsafe { &mut (*self.0.as_ptr()).flags });
+    }
+    /// ```rust,no_run
+    /// alien_signals::get_active_sub().unwrap().add_flags(
+    ///     alien_signals::Flags::DIRTY
+    /// );
+    #[inline(always)]
+    pub fn add_flags(&self, flags_to_add: Flags) {
+        unsafe {
+            (*self.0.as_ptr()).flags |= flags_to_add;
+        }
+    }
+    /// ```rust,no_run
+    /// alien_signals::get_active_sub().unwrap().remove_flags(
+    ///     alien_signals::Flags::RECURSED_CHECK
+    /// );
+    #[inline(always)]
+    pub fn remove_flags(&self, flags_to_remove: Flags) {
+        unsafe {
+            (*self.0.as_ptr()).flags &= !flags_to_remove;
+        }
     }
 
     #[inline]
     pub(crate) fn deps(&self) -> Option<Link> {
-        unsafe { &*self.0.as_ptr() }.deps
+        unsafe { (*self.0.as_ptr()).deps }
     }
     #[inline]
     pub(crate) fn set_deps(&self, link: Option<Link>) {
-        unsafe { &mut *self.0.as_ptr() }.deps = link;
+        unsafe {
+            (*self.0.as_ptr()).deps = link;
+        }
     }
 
     #[inline]
     pub(crate) fn deps_tail(&self) -> Option<Link> {
-        unsafe { &*self.0.as_ptr() }.deps_tail
+        unsafe { (*self.0.as_ptr()).deps_tail }
     }
     #[inline]
     pub(crate) fn set_deps_tail(&self, link: Option<Link>) {
-        unsafe { &mut *self.0.as_ptr() }.deps_tail = link;
+        unsafe {
+            (*self.0.as_ptr()).deps_tail = link;
+        }
     }
 
     #[inline]
     pub(crate) fn subs(&self) -> Option<Link> {
-        unsafe { &*self.0.as_ptr() }.subs
+        unsafe { (*self.0.as_ptr()).subs }
     }
     #[inline]
     pub(crate) fn set_subs(&self, link: Option<Link>) {
-        unsafe { &mut *self.0.as_ptr() }.subs = link;
+        unsafe {
+            (*self.0.as_ptr()).subs = link;
+        }
     }
 
     #[inline]
     pub(crate) fn subs_tail(&self) -> Option<Link> {
-        unsafe { &*self.0.as_ptr() }.subs_tail
+        unsafe { (*self.0.as_ptr()).subs_tail }
     }
     #[inline]
     pub(crate) fn set_subs_tail(&self, link: Option<Link>) {
-        unsafe { &mut *self.0.as_ptr() }.subs_tail = link;
+        unsafe {
+            (*self.0.as_ptr()).subs_tail = link;
+        }
     }
 }
 
@@ -252,7 +294,7 @@ impl Node<NodeContext> {
 
     #[inline]
     pub(crate) fn kind(&self) -> NodeContextKind {
-        unsafe { &*self.0.as_ptr() }.context.kind()
+        (unsafe { &(*self.0.as_ptr()).context }).kind()
     }
 }
 
@@ -291,19 +333,24 @@ impl Node<SignalContext> {
         })
     }
 
-    pub(crate) fn context(&self) -> &SignalContext {
-        match &*unsafe { &*self.0.as_ptr() }.context {
-            NodeContext::Signal(ctx) => ctx,
+    /// SAFETY: `f` MUST NOT internally call `.with_context_mut` on the same `Node`.
+    #[inline]
+    pub(crate) unsafe fn with_context<R>(&self, f: impl FnOnce(&SignalContext) -> R) -> R {
+        match unsafe { &*(*self.0.as_ptr()).context } {
+            NodeContext::Signal(ctx) => f(ctx),
             _ => panic!("BUG: Node is not a Signal"),
         }
     }
-    pub(crate) fn update_context(&self, f: impl FnOnce(&mut SignalContext)) {
-        match &mut *unsafe { &mut *self.0.as_ptr() }.context {
+    /// SAFETY: `f` MUST NOT internally call `.with_context` or `.with_context_mut` on the same `Node`.
+    #[inline]
+    pub(crate) unsafe fn with_context_mut<R>(&self, f: impl FnOnce(&mut SignalContext) -> R) -> R {
+        match unsafe { &mut *(*self.0.as_ptr()).context } {
             NodeContext::Signal(ctx) => f(ctx),
             _ => panic!("BUG: Node is not a Signal"),
         }
     }
 }
+
 impl Node<ComputedContext> {
     pub(crate) fn new<T: PartialEq + 'static>(getter: impl Fn(Option<&T>) -> T + 'static) -> Self {
         Self::new_with_eq_fn(getter, T::eq)
@@ -346,14 +393,21 @@ impl Node<ComputedContext> {
         })
     }
 
-    pub(crate) fn context(&self) -> &ComputedContext {
-        match &*unsafe { &*self.0.as_ptr() }.context {
-            NodeContext::Computed(ctx) => ctx,
+    /// SAFETY: `f` MUST NOT internally call `.with_context_mut` on the same `Node`.
+    #[inline]
+    pub(crate) unsafe fn with_context<R>(&self, f: impl FnOnce(&ComputedContext) -> R) -> R {
+        match unsafe { &*(*self.0.as_ptr()).context } {
+            NodeContext::Computed(ctx) => f(ctx),
             _ => panic!("BUG: Node is not a Computed"),
         }
     }
-    pub(crate) fn update_context(&self, f: impl FnOnce(&mut ComputedContext)) {
-        match &mut *unsafe { &mut *self.0.as_ptr() }.context {
+    /// SAFETY: `f` MUST NOT internally call `.with_context` or `.with_context_mut` on the same `Node`.
+    #[inline]
+    pub(crate) unsafe fn with_context_mut<R>(
+        &self,
+        f: impl FnOnce(&mut ComputedContext) -> R,
+    ) -> R {
+        match unsafe { &mut *(*self.0.as_ptr()).context } {
             NodeContext::Computed(ctx) => f(ctx),
             _ => panic!("BUG: Node is not a Computed"),
         }
@@ -376,9 +430,10 @@ impl Node<EffectContext> {
         })
     }
 
-    pub(crate) fn context(&self) -> &EffectContext {
-        match &*unsafe { &*self.0.as_ptr() }.context {
-            NodeContext::Effect(ctx) => ctx,
+    #[inline]
+    pub(crate) fn with_context<R>(&self, f: impl FnOnce(&EffectContext) -> R) -> R {
+        match unsafe { &*(*self.0.as_ptr()).context } {
+            NodeContext::Effect(ctx) => f(ctx),
             _ => panic!("BUG: Node is not an Effect"),
         }
     }
