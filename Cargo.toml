@@ -17,8 +17,9 @@ type_complexity = "allow"
 collapsible_if  = "allow" # for clear correspondence to alien-signals original code
 
 [package.metadata.tasks]
-CI            = "cargo metask test format_check clippy clippy_wasm32"
+CI            = "cargo metask test format_check clippy clippy_wasm32 miri"
 test          = "cargo test"
 format_check  = "cargo fmt --check"
 clippy        = "cargo +nightly clippy --all-targets -- --deny warnings"
 clippy_wasm32 = "cargo +nightly clippy --all-targets --target wasm32-unknown-unknown -- --deny warnings"
+miri          = "cargo +nightly miri test"

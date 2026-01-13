@@ -20,7 +20,7 @@ jobs:
           rustup component add rustfmt
           rustup target add wasm32-unknown-unknown
           rustup update nightly
-          rustup component add clippy --toolchain nightly
+          rustup component add clippy miri --toolchain nightly
           rustup target add wasm32-unknown-unknown --toolchain nightly
       
       - name: Run Tasks

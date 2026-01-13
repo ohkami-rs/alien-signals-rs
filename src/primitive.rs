@@ -168,7 +168,7 @@ impl<T> SyncUnsafeCell<T> {
 }
 
 pub(crate) struct ChunkedArena<T, const CHUNK_SIZE: usize> {
-    chunks: Vec<Box<[std::mem::MaybeUninit<T>; CHUNK_SIZE]>>,
+    chunks: Vec<std::ptr::NonNull<[std::mem::MaybeUninit<T>; CHUNK_SIZE]>>,
     current_chunk_index: usize,
     next_slot_index: usize,
 }
@@ -176,9 +176,10 @@ impl<T, const CHUNK_SIZE: usize> ChunkedArena<T, CHUNK_SIZE> {
     #[cold]
     fn make_first_chunk(&mut self) {
         if self.chunks.is_empty() {
-            self.chunks.push(Box::new(
-                [const { std::mem::MaybeUninit::uninit() }; CHUNK_SIZE],
-            ));
+            let chunk = Box::new([const { std::mem::MaybeUninit::uninit() }; CHUNK_SIZE]);
+            // SAFETY: This pointer is not null because it comes from a Box.
+            self.chunks
+                .push(unsafe { std::ptr::NonNull::new_unchecked(Box::into_raw(chunk)) });
         }
     }
 
@@ -206,17 +207,21 @@ impl<T, const CHUNK_SIZE: usize> ChunkedArena<T, CHUNK_SIZE> {
         }
 
         if self.next_slot_index >= CHUNK_SIZE {
-            self.chunks.push(Box::new(
-                [const { std::mem::MaybeUninit::uninit() }; CHUNK_SIZE],
-            ));
+            let chunk = Box::new([const { std::mem::MaybeUninit::uninit() }; CHUNK_SIZE]);
+            // SAFETY: This pointer is not null because it comes from a Box.
+            self.chunks
+                .push(unsafe { std::ptr::NonNull::new_unchecked(Box::into_raw(chunk)) });
             self.current_chunk_index += 1;
             self.next_slot_index = 0;
         }
-        let alloced_ptr = unsafe {
-            self.chunks
+        let alloced_ptr: &mut T = unsafe {
+            let chunk_ptr = self
+                .chunks
                 .get_unchecked_mut(self.current_chunk_index)
-                .get_unchecked_mut(self.next_slot_index)
-                .write(value)
+                .as_ptr();
+            let chunk_head_ptr = chunk_ptr as *mut std::mem::MaybeUninit<T>;
+            let slot_ptr = chunk_head_ptr.add(self.next_slot_index);
+            std::mem::MaybeUninit::write(&mut *slot_ptr, value)
         };
         self.next_slot_index += 1;
         unsafe { std::ptr::NonNull::new_unchecked(alloced_ptr) }
@@ -229,18 +234,28 @@ impl<T, const CHUNK_SIZE: usize> Default for ChunkedArena<T, CHUNK_SIZE> {
 }
 impl<T, const CHUNK_SIZE: usize> Drop for ChunkedArena<T, CHUNK_SIZE> {
     fn drop(&mut self) {
-        for chunk in &mut self.chunks[..self.current_chunk_index] {
-            chunk.iter_mut().for_each(|slot| unsafe {
-                std::ptr::drop_in_place(slot.as_mut_ptr());
-            });
+        // Drop all initialized elements
+        for (i, chunk) in self.chunks.iter_mut().enumerate() {
+            let initialized_count = if i == self.current_chunk_index {
+                self.next_slot_index
+            } else {
+                CHUNK_SIZE
+            };
+
+            let chunk_ptr = chunk.as_ptr();
+            let chunk_head_ptr = chunk_ptr as *mut std::mem::MaybeUninit<T>;
+            for j in 0..initialized_count {
+                unsafe {
+                    std::mem::MaybeUninit::assume_init_drop(&mut *chunk_head_ptr.add(j));
+                }
+            }
         }
-        if self.next_slot_index > 0 {
-            self.chunks[self.current_chunk_index]
-                .iter_mut()
-                .take(self.next_slot_index)
-                .for_each(|slot| unsafe {
-                    std::ptr::drop_in_place(slot.as_mut_ptr());
-                });
+
+        // Drop all chunks
+        for chunk in self.chunks.drain(..) {
+            unsafe {
+                let _ = Box::from_raw(chunk.as_ptr());
+            }
         }
     }
 }
