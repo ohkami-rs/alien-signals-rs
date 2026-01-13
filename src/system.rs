@@ -279,7 +279,7 @@ pub(crate) fn check_dirty(mut link: Link, mut sub: Node) -> bool {
                 }
                 dirty = false;
             } else {
-                sub.update_flags(|f| *f &= !Flags::PENDING);
+                sub.remove_flags(Flags::PENDING);
             }
 
             sub = link.sub();
@@ -305,7 +305,7 @@ pub(crate) fn shallow_propagate(mut link: Link) {
         let flags = sub.flags();
 
         if (flags & (Flags::PENDING | Flags::DIRTY)) == Flags::PENDING {
-            sub.update_flags(|f| *f |= Flags::DIRTY);
+            sub.add_flags(Flags::DIRTY);
             if (flags & (Flags::WATCHING | Flags::RECURSED_CHECK)) == Flags::WATCHING {
                 super::notify(
                     sub.try_into()
