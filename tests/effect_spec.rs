@@ -353,7 +353,7 @@ fn should_support_custom_recurse_effect() {
         move || {
             alien_signals::get_active_sub()
                 .unwrap()
-                .update_flags(|f| *f &= !alien_signals::Flags::RECURSED_CHECK);
+                .remove_flags(alien_signals::Flags::RECURSED_CHECK);
             *triggers.lock().unwrap() += 1;
             src.set(i32::min(src.get() + 1, 5));
         }
