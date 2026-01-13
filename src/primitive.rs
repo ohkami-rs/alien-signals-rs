@@ -178,7 +178,8 @@ impl<T, const CHUNK_SIZE: usize> ChunkedArena<T, CHUNK_SIZE> {
         if self.chunks.is_empty() {
             let chunk = Box::new([const { std::mem::MaybeUninit::uninit() }; CHUNK_SIZE]);
             // SAFETY: This pointer is not null because it comes from a Box.
-            self.chunks.push(unsafe { std::ptr::NonNull::new_unchecked(Box::into_raw(chunk)) });
+            self.chunks
+                .push(unsafe { std::ptr::NonNull::new_unchecked(Box::into_raw(chunk)) });
         }
     }
 
@@ -208,12 +209,16 @@ impl<T, const CHUNK_SIZE: usize> ChunkedArena<T, CHUNK_SIZE> {
         if self.next_slot_index >= CHUNK_SIZE {
             let chunk = Box::new([const { std::mem::MaybeUninit::uninit() }; CHUNK_SIZE]);
             // SAFETY: This pointer is not null because it comes from a Box.
-            self.chunks.push(unsafe { std::ptr::NonNull::new_unchecked(Box::into_raw(chunk)) });
+            self.chunks
+                .push(unsafe { std::ptr::NonNull::new_unchecked(Box::into_raw(chunk)) });
             self.current_chunk_index += 1;
             self.next_slot_index = 0;
         }
         let alloced_ptr: &mut T = unsafe {
-            let chunk_ptr = self.chunks.get_unchecked_mut(self.current_chunk_index).as_ptr();
+            let chunk_ptr = self
+                .chunks
+                .get_unchecked_mut(self.current_chunk_index)
+                .as_ptr();
             let chunk_head_ptr = chunk_ptr as *mut std::mem::MaybeUninit<T>;
             let slot_ptr = chunk_head_ptr.add(self.next_slot_index);
             std::mem::MaybeUninit::write(&mut *slot_ptr, value)
@@ -236,7 +241,7 @@ impl<T, const CHUNK_SIZE: usize> Drop for ChunkedArena<T, CHUNK_SIZE> {
             } else {
                 CHUNK_SIZE
             };
-            
+
             let chunk_ptr = chunk.as_ptr();
             let chunk_head_ptr = chunk_ptr as *mut std::mem::MaybeUninit<T>;
             for j in 0..initialized_count {
@@ -245,7 +250,7 @@ impl<T, const CHUNK_SIZE: usize> Drop for ChunkedArena<T, CHUNK_SIZE> {
                 }
             }
         }
-        
+
         // Drop all chunks
         for chunk in self.chunks.drain(..) {
             unsafe {
