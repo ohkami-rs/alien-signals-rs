@@ -1,6 +1,6 @@
 [package]
 name          = "alien-signals"
-version       = "0.1.1"
+version       = "0.1.2"
 edition       = "2024"
 authors       = ["kanarus <mail@kanarus.dev>"]
 documentation = "https://docs.rs/alien-signals"
@@ -8,7 +8,7 @@ homepage      = "https://crates.io/crates/alien-signals"
 repository    = "https://github.com/ohkami-rs/alien-signals-rs"
 readme        = "README.md"
 license       = "MIT"
-description   = "👾 Rust port of alien-signals - the lightest signal library"
+description   = "Rust port of alien-signals 👾 the lightest signal library"
 keywords      = ["reactive", "signals", "alien-signals"]
 categories    = ["data-structures", "web-programming"]
 
