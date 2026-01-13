@@ -449,7 +449,7 @@ impl From<Node<EffectContext>> for Node<NodeContext> {
 impl TryFrom<Node<NodeContext>> for Node<SignalContext> {
     type Error = ();
     fn try_from(node: Node<NodeContext>) -> Result<Self, Self::Error> {
-        match unsafe { &*node.0.as_ptr() }.context.kind() {
+        match node.kind() {
             NodeContextKind::Signal => Ok(Node(node.0, std::marker::PhantomData)),
             _ => Err(()),
         }
@@ -458,7 +458,7 @@ impl TryFrom<Node<NodeContext>> for Node<SignalContext> {
 impl TryFrom<Node<NodeContext>> for Node<ComputedContext> {
     type Error = ();
     fn try_from(node: Node<NodeContext>) -> Result<Self, Self::Error> {
-        match unsafe { &*node.0.as_ptr() }.context.kind() {
+        match node.kind() {
             NodeContextKind::Computed => Ok(Node(node.0, std::marker::PhantomData)),
             _ => Err(()),
         }
@@ -467,7 +467,7 @@ impl TryFrom<Node<NodeContext>> for Node<ComputedContext> {
 impl TryFrom<Node<NodeContext>> for Node<EffectContext> {
     type Error = ();
     fn try_from(node: Node<NodeContext>) -> Result<Self, Self::Error> {
-        match unsafe { &*node.0.as_ptr() }.context.kind() {
+        match node.kind() {
             NodeContextKind::Effect => Ok(Node(node.0, std::marker::PhantomData)),
             _ => Err(()),
         }
