@@ -50,6 +50,11 @@ fn unwatched(node: Node) {
     }
 }
 
+/// alias of [`Signal::new`]
+pub fn signal<T: Clone + PartialEq + 'static>(init: T) -> Signal<T> {
+    Signal::new(init)
+}
+
 pub struct Signal<T>(Node<SignalContext>, std::marker::PhantomData<T>);
 // not requiring `T: Clone`
 impl<T> Clone for Signal<T> {
@@ -92,6 +97,13 @@ impl<T: Clone + 'static> Signal<T> {
     }
 }
 
+/// alias of [`Computed::new`]
+pub fn computed<T: Clone + PartialEq + 'static>(
+    getter: impl Fn(Option<&T>) -> T + 'static,
+) -> Computed<T> {
+    Computed::new(getter)
+}
+
 pub struct Computed<T>(Node<ComputedContext>, std::marker::PhantomData<T>);
 // not requiring `T: Clone`
 impl<T> Clone for Computed<T> {
@@ -122,6 +134,11 @@ impl<T: Clone + 'static> Computed<T> {
     }
 }
 
+/// alias of [`Effect::new`]
+pub fn effect(f: impl Fn() + 'static) -> Effect {
+    Effect::new(f)
+}
+
 pub struct Effect {
     dispose: Box<dyn FnOnce()>,
 }
@@ -143,6 +160,11 @@ impl Effect {
     pub fn dispose(self) {
         (self.dispose)();
     }
+}
+
+/// alias of [`EffectScope::new`]
+pub fn effect_scope(f: impl FnOnce() + 'static) -> EffectScope {
+    EffectScope::new(f)
 }
 
 pub struct EffectScope {
