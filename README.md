@@ -51,34 +51,33 @@ runtime: node 24.0.0 (x64-linux)
 
 ```sh
 cargo +nightly bench --benches
-   Compiling alien-signals v0.1.3 (/home/kanarus/projects/ohkami-rs/alien-signals-rs)
-    Finished `bench` profile [optimized] target(s) in 0.79s
-     Running unittests src/lib.rs (target/release/deps/alien_signals-f7e64dac92c4dbf6)
+    Finished `bench` profile [optimized] target(s) in 0.00s
+     Running unittests src/lib.rs (target/release/deps/alien_signals-259f2f7e56e210c0)
 
 running 0 tests
 
 test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
-     Running benches/propagate.rs (target/release/deps/propagate-e7c35173b626601b)
+     Running benches/propagate.rs (target/release/deps/propagate-19f773196ce8aee5)
 
 running 15 tests
-test propagate_1000x1   ... bench:      35,966.36 ns/iter (+/- 407.67)
-test propagate_1000x10  ... bench:     342,868.96 ns/iter (+/- 6,842.63)
-test propagate_1000x100 ... bench:   3,485,965.60 ns/iter (+/- 68,293.28)
-test propagate_100x1    ... bench:       3,693.75 ns/iter (+/- 106.61)
-test propagate_100x10   ... bench:      28,446.80 ns/iter (+/- 653.14)
-test propagate_100x100  ... bench:     344,254.59 ns/iter (+/- 5,106.58)
-test propagate_100x1000 ... bench:   3,458,156.85 ns/iter (+/- 151,837.81)
-test propagate_10x1     ... bench:         437.23 ns/iter (+/- 11.92)
-test propagate_10x10    ... bench:       3,169.95 ns/iter (+/- 98.84)
-test propagate_10x100   ... bench:      32,334.04 ns/iter (+/- 555.22)
-test propagate_10x1000  ... bench:     383,309.50 ns/iter (+/- 2,949.69)
-test propagate_1x1      ... bench:          79.02 ns/iter (+/- 2.82)
-test propagate_1x10     ... bench:         357.39 ns/iter (+/- 15.32)
-test propagate_1x100    ... bench:       3,178.23 ns/iter (+/- 54.87)
-test propagate_1x1000   ... bench:      31,861.69 ns/iter (+/- 1,070.36)
+test propagate_1000x1   ... bench:      36,414.75 ns/iter (+/- 372.66)
+test propagate_1000x10  ... bench:     347,642.75 ns/iter (+/- 8,130.06)
+test propagate_1000x100 ... bench:   3,497,834.45 ns/iter (+/- 56,211.82)
+test propagate_100x1    ... bench:       3,735.68 ns/iter (+/- 61.34)
+test propagate_100x10   ... bench:      28,943.11 ns/iter (+/- 861.10)
+test propagate_100x100  ... bench:     349,819.81 ns/iter (+/- 5,018.89)
+test propagate_100x1000 ... bench:   3,502,680.90 ns/iter (+/- 91,955.23)
+test propagate_10x1     ... bench:         407.45 ns/iter (+/- 9.21)
+test propagate_10x10    ... bench:       2,744.33 ns/iter (+/- 43.89)
+test propagate_10x100   ... bench:      28,617.85 ns/iter (+/- 4,640.30)
+test propagate_10x1000  ... bench:     386,202.55 ns/iter (+/- 5,619.67)
+test propagate_1x1      ... bench:          77.82 ns/iter (+/- 2.21)
+test propagate_1x10     ... bench:         355.50 ns/iter (+/- 6.05)
+test propagate_1x100    ... bench:       3,188.09 ns/iter (+/- 167.23)
+test propagate_1x1000   ... bench:      31,687.25 ns/iter (+/- 1,337.49)
 
-test result: ok. 0 passed; 0 failed; 0 ignored; 15 measured; 0 filtered out; finished in 30.08s
+test result: ok. 0 passed; 0 failed; 0 ignored; 15 measured; 0 filtered out; finished in 40.83s
 
 ```
 
