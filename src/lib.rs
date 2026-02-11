@@ -78,22 +78,26 @@ impl<T: Clone + 'static> Signal<T> {
 
     #[inline]
     pub fn get(&self) -> T {
-        get_signal_oper(self.0)
+        signal_get_oper(self.0)
     }
 
     #[inline]
     pub fn set(&self, value: T) {
-        set_signal_oper(self.0, value);
+        signal_set_oper(self.0, value);
     }
 
     /// set with current value
     pub fn set_with(&self, f: impl FnOnce(&T) -> T) {
-        set_with_signal_oper(self.0, f);
+        signal_set_with_oper(self.0, f);
     }
 
-    #[inline]
+    #[deprecated(since = "0.1.4", note = "use `.set_mut()` instead")]
     pub fn update(&self, f: impl FnOnce(&mut T)) {
-        update_signal_oper(self.0, f);
+        self.set_mut(f)
+    }
+    #[inline]
+    pub fn set_mut(&self, f: impl FnOnce(&mut T)) {
+        signal_set_mut_oper(self.0, f);
     }
 }
 
@@ -336,7 +340,7 @@ fn computed_oper<T: Clone + 'static>(this: Node<ComputedContext>) -> T {
     }
 }
 
-fn _set_signal_oper_core<T: 'static>(this: Node<SignalContext>, value: T) {
+fn _signal_set_oper_core<T: 'static>(this: Node<SignalContext>, value: T) {
     let value = SmallAny::new(value);
     // SAFETY: the closure does not internally call `.with_context` or `.with_context_mut` on `this`
     let is_changed = unsafe {
@@ -361,11 +365,11 @@ fn _set_signal_oper_core<T: 'static>(this: Node<SignalContext>, value: T) {
     }
 }
 
-fn set_signal_oper<T: 'static>(this: Node<SignalContext>, value: T) {
-    _set_signal_oper_core(this, value);
+fn signal_set_oper<T: 'static>(this: Node<SignalContext>, value: T) {
+    _signal_set_oper_core(this, value);
 }
 
-fn set_with_signal_oper<T: 'static>(this: Node<SignalContext>, set_with: impl FnOnce(&T) -> T) {
+fn signal_set_with_oper<T: 'static>(this: Node<SignalContext>, set_with: impl FnOnce(&T) -> T) {
     // SAFETY:
     //
     // - `with_context`: the closure does not internally call `.with_context_mut` on `this`.
@@ -376,10 +380,10 @@ fn set_with_signal_oper<T: 'static>(this: Node<SignalContext>, set_with: impl Fn
             set_with(current_value)
         })
     };
-    _set_signal_oper_core(this, value);
+    _signal_set_oper_core(this, value);
 }
 
-fn update_signal_oper<T: Clone + 'static>(this: Node<SignalContext>, update: impl FnOnce(&mut T)) {
+fn signal_set_mut_oper<T: Clone + 'static>(this: Node<SignalContext>, update: impl FnOnce(&mut T)) {
     // SAFETY:
     //
     // - `with_context`: the closure does not internally call `.with_context_mut` on `this`.
@@ -391,10 +395,10 @@ fn update_signal_oper<T: Clone + 'static>(this: Node<SignalContext>, update: imp
             value
         })
     };
-    _set_signal_oper_core(this, value);
+    _signal_set_oper_core(this, value);
 }
 
-fn get_signal_oper<T: Clone + 'static>(this: Node<SignalContext>) -> T {
+fn signal_get_oper<T: Clone + 'static>(this: Node<SignalContext>) -> T {
     if (this.flags() & Flags::DIRTY).is_nonzero() {
         if update_signal(this) {
             if let Some(subs) = this.subs() {

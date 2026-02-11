@@ -11,7 +11,7 @@ fn should_trigger_updates_for_dependent_computed_signals() {
     let length = Computed::new(move |_| arr.get().len());
 
     assert_eq!(length.get(), 0);
-    arr.update(|arr| arr.push(1));
+    arr.set_mut(|arr| arr.push(1));
     trigger(move || {
         let _ = arr.get();
     });
@@ -25,7 +25,7 @@ fn should_trigger_updates_for_the_second_source_signal() {
     let length = Computed::new(move |_| src2.get().len());
 
     assert_eq!(length.get(), 0);
-    src2.update(|arr| arr.push(1));
+    src2.set_mut(|arr| arr.push(1));
     trigger(move || {
         let _ = src1.get();
         let _ = src2.get();
