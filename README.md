@@ -102,13 +102,13 @@ alien-signals = "0.1"
 ### Basic APIs
 
 ```rust
-use alien_signals::{Signal, Computed, Effect};
+use alien_signals::{signal, computed, effect};
 
 fn main() {
-    let count = Signal::new(1);
-    let double_count = Computed::new(move |_| count.get() * 2);
+    let count = signal(1);
+    let double_count = computed(move |_| count.get() * 2);
     
-    Effect::new(move || {
+    effect(move || {
         println!("Count is: {}", count.get());
     }); // Count is: 1
     
@@ -123,20 +123,20 @@ fn main() {
 ### Effect Scope
 
 ```rust
-use alien_signals::{Signal, Effect, EffectScope};
+use alien_signals::{signal, effect, effect_scope};
 
 fn main() {
-    let count = Signal::new(1);
+    let count = signal(1);
     
-    let effect = EffectScope::new(move || {
-        Effect::new(move || {
+    let scope = effect_scope(move || {
+        effect(move || {
             println!("Count in scope: {}", count.get());
         }); // Count in scope: 1
     });
     
     count.set(2); // Count in scope: 2
     
-    effect.dispose();
+    scope.dispose();
     
     count.set(3); // prints nothing
 }
@@ -145,16 +145,16 @@ fn main() {
 ### Nested Effects
 
 ```rust
-use alien_signals::{Signal, Effect};
+use alien_signals::{signal, effect};
 
 fn main() {
-    let show = Signal::new(true);
-    let count = Signal::new(1);
+    let show = signal(true);
+    let count = signal(1);
     
-    Effect::new(move || {
+    effect(move || {
         if show.get() {
             // This inner effect is created when `show` is true
-            Effect::new(move || {
+            effect(move || {
                 println!("Count is: {}", count.get());
             });
         }
@@ -172,7 +172,7 @@ fn main() {
 ### Manual Triggering
 
 ```rust
-use alien_signals::{Signal, Computed, trigger};
+use alien_signals::{Signal, computed, trigger};
 use std::{sync::Mutex, rc::Rc};
 
 fn main() {
@@ -180,7 +180,7 @@ fn main() {
         Rc::new(Mutex::new(vec![])),
         |a, b| *a.lock().unwrap() == *b.lock().unwrap()
     );
-    let length = Computed::new(move |_| arr.get().lock().unwrap().len());
+    let length = computed(move |_| arr.get().lock().unwrap().len());
     
     assert_eq!(length.get(), 0);
     
